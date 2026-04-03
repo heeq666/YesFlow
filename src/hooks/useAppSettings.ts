@@ -54,7 +54,7 @@ const DEFAULT_PROVIDERS: ApiProvider[] = [
 const DEFAULT_SETTINGS: Settings = {
   language: 'zh',
   themeMode: 'light',
-  version: '0.3.0',
+  version: '0.3.1',
   hotkeys: {
     save: 'Ctrl+S',
     export: 'Ctrl+Alt+S',
@@ -90,7 +90,7 @@ const DEFAULT_SETTINGS: Settings = {
     showCanvasGrid: false,
   },
   nodeTools: {
-    enabled: true,
+    enabled: false,
     showToolbarOnSelect: true,
     panelWidth: 420,
     enabledTools: {
@@ -98,6 +98,7 @@ const DEFAULT_SETTINGS: Settings = {
       document: true,
       link: true,
       schedule: true,
+      image: true,
     },
     calendar: {
       enabled: true,
@@ -111,10 +112,10 @@ const DEFAULT_SETTINGS: Settings = {
     providers: DEFAULT_PROVIDERS,
   },
   updateNotes: [
-    '✨ 节点工作台：现在每个任务节点都可以挂载文档、表格、链接和时间信息。',
-    '🤖 多模型接入：内置支持 MiniMax、DeepSeek、通义千问、豆包、智谱与 OpenAI Compatible。',
-    '🗂️ 项目记录与排期：支持本地记录、快速回载、拖拽排序，以及日历化的时间视图。',
-    '🎛️ 深度可定制：快捷键、交互方式、外观预设、连线表现和节点工具都可按习惯调整。',
+    '🖼️ 节点图片工具：现在可以给任务节点上传本地图片，或直接挂载线上图片链接。',
+    '🤖 项目级 AI 状态：每个项目都会保留节点生成中的状态、完成提醒与失败反馈。',
+    '💾 更干净的保存结果：项目记录和导出文件会自动清理临时运行态字段，持久化更稳定。',
+    '🛡️ 运行时兜底：新增错误边界，出现异常时优先展示错误面板，避免直接白屏。',
   ],
 };
 

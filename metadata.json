@@ -1,5 +1,5 @@
 {
   "name": "YesFlow",
-  "description": "YesFlow 0.3.0 is a visual AI workflow workspace for generating plans, editing node-based flows, and attaching documents, links, tables, and schedules to each task.",
+  "description": "YesFlow 0.3.1 is a visual AI workflow workspace for generating plans, editing node-based flows, and attaching documents, images, links, tables, and schedules to each task.",
   "requestFramePermissions": []
 }

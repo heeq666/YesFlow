@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { Suspense, lazy, useCallback, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useCallback, useMemo, useState, useEffect } from 'react';
 import {
   MiniMap,
   useNodesState,
@@ -71,10 +71,13 @@ import ContextualToolbar from './components/ContextualToolbar';
 import FlowCanvas from './components/FlowCanvas';
 import ConfigModal from './components/ConfigModal';
 import ExportFileModal from './components/ExportFileModal';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import { getHelperLines, type HelperLines as HelperLinesType } from './utils/helperLineUtils';
 import { getNodeAbsolutePosition } from './utils/nodeUtils';
 import { createHistory, pushToHistory } from './utils/historyUtils';
 import { ensureToolState } from './utils/nodeTools';
+import { clearTransientNodeData } from './utils/nodePersistence';
+import { getTaskNodeLayout } from './constants/taskNodeLayout';
 import { type ConnectionMode, type NodeStatus, type NodeToolType, type ProjectRecord, type TaskData, type TaskMode, type Settings, type NodePreset } from './types';
 import { NodeSettingsContext } from './contexts/NodeSettingsContext';
 import { translations } from './constants/translations';
@@ -89,6 +92,7 @@ import { useCanvasHotkeys } from './hooks/useCanvasHotkeys';
 import { useEdgeHighlighting } from './hooks/useEdgeHighlighting';
 import { useProjectFileIO } from './hooks/useProjectFileIO';
 import { useProjectRecords } from './hooks/useProjectRecords';
+import { useRecordNodeAiTasks } from './hooks/useRecordNodeAiTasks';
 
 import '@xyflow/react/dist/style.css';
 
@@ -185,6 +189,8 @@ export default function App() {
   const [showStartDialog, setShowStartDialog] = useState(true);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [isGeneratingPlanCompleting, setIsGeneratingPlanCompleting] = useState(false);
+  const [planGenerationOutcome, setPlanGenerationOutcome] = useState<'idle' | 'running' | 'success' | 'aborted' | 'error'>('idle');
+  const [pendingAiViewportRequest, setPendingAiViewportRequest] = useState<{ nonce: number; scope: 'all' | 'nodes'; nodeIds?: string[] } | null>(null);
   const [generatingRecordId, setGeneratingRecordId] = useState<string | null>(null);
   const [generatingCardTargetRect, setGeneratingCardTargetRect] = useState<ViewportRect | null>(null);
   const [streamingContent, setStreamingContent] = useState('');
@@ -194,13 +200,16 @@ export default function App() {
   const [clipboard, setClipboard] = useState<{ nodes: Node[]; edges: Edge[] } | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fileDragDepthRef = React.useRef(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [isFileDragActive, setIsFileDragActive] = useState(false);
   const { settings, setSettings } = useAppSettings();
   const themeMode = settings.themeMode;
   const activeProvider = settings.apiConfig.providers.find(p => p.id === settings.apiConfig.activeProviderId) || settings.apiConfig.providers[0];
   const hasApiKey = Boolean(activeProvider?.apiKey);
   const activeProviderName = activeProvider?.name || 'MiniMax';
+  const taskNodeLayout = getTaskNodeLayout(mode);
 
   // --- Start of Request Handlers ---
   const handleUpdateSettings = (newSettings: Settings) => {
@@ -263,6 +272,7 @@ export default function App() {
     saveToLocal,
     deleteRecord,
     reorderRecords,
+    updateRecord,
   } = useProjectRecords({
     nodes,
     edges,
@@ -270,6 +280,20 @@ export default function App() {
     language,
     mode,
   });
+  const currentRecordIdRef = React.useRef<string | null>(currentRecordId);
+  const abortAiBeforeCanvasSwitchRef = React.useRef<() => void>(() => {});
+  useEffect(() => {
+    currentRecordIdRef.current = currentRecordId;
+  }, [currentRecordId]);
+
+  const resetPlanGenerationUi = useCallback(() => {
+    setIsGeneratingPlan(false);
+    setIsGeneratingPlanCompleting(false);
+    setStreamingContent('');
+    setHideGeneratingRecord(false);
+    setGeneratingRecordId(null);
+    setPlanGenerationOutcome('idle');
+  }, []);
 
   const selectionStartNodes = React.useRef<string[]>([]);
   const updateNodeInternals = useUpdateNodeInternals();
@@ -366,8 +390,8 @@ export default function App() {
       right: 'left',
     } as const;
     const pos = { 
-      x: sourceNode.position.x + (position === 'right' ? 300 : position === 'left' ? -300 : 0), 
-      y: sourceNode.position.y + (position === 'bottom' ? 180 : position === 'top' ? -180 : 0) 
+      x: sourceNode.position.x + (position === 'right' ? taskNodeLayout.addOffsetX : position === 'left' ? -taskNodeLayout.addOffsetX : 0), 
+      y: sourceNode.position.y + (position === 'bottom' ? taskNodeLayout.addOffsetY : position === 'top' ? -taskNodeLayout.addOffsetY : 0) 
     };
     const newNode: Node = { 
       id: newNodeId, type: 'task', position: pos, selected: true,
@@ -390,9 +414,13 @@ export default function App() {
       return next;
     });
     setSelectedNodeId(newNodeId);
-  }, [getNodes, language, handleStatusChange, handleUpdateNodeData, defaultPathType, connectionMode, takeSnapshot, setNodes, setEdges]);
+  }, [getNodes, language, handleStatusChange, handleUpdateNodeData, defaultPathType, connectionMode, takeSnapshot, setNodes, setEdges, taskNodeLayout.addOffsetX, taskNodeLayout.addOffsetY]);
 
   const hydrateTaskData = useCallback((data: Partial<TaskData>) => ({
+    label: typeof data.label === 'string' ? data.label : '',
+    description: typeof data.description === 'string' ? data.description : '',
+    type: typeof data.type === 'string' && data.type.trim().length > 0 ? data.type : 'execution',
+    status: data.status || 'pending',
     ...data,
     language,
     onStatusChange: handleStatusChange,
@@ -409,22 +437,111 @@ export default function App() {
   }, [language, saveToLocal]);
 
   const ensureCurrentRecord = useCallback(() => {
-    if (currentRecordId) return currentRecordId;
+    if (currentRecordIdRef.current) return currentRecordIdRef.current;
 
-    return createRecord({
+    const record = createRecord({
       name: projectName || 'YesFlow Project',
       nodes,
       edges,
       language,
       mode,
-    }).id;
-  }, [currentRecordId, createRecord, projectName, nodes, edges, language, mode]);
+    });
+
+    currentRecordIdRef.current = record.id;
+    return record.id;
+  }, [createRecord, projectName, nodes, edges, language, mode]);
+
+  const ensureCurrentRecordSnapshot = useCallback(() => {
+    if (currentRecordIdRef.current) {
+      const record = saveToLocal();
+      currentRecordIdRef.current = record.id;
+      return record;
+    }
+
+    const record = createRecord({
+      name: projectName || 'YesFlow Project',
+      nodes,
+      edges,
+      language,
+      mode,
+    });
+
+    currentRecordIdRef.current = record.id;
+    return record;
+  }, [createRecord, saveToLocal, projectName, nodes, edges, language, mode]);
+
+  const {
+    recordAiStates,
+    isRecordTaskRunning,
+    markRecordAiStateSeen,
+    abortTasksForRecordNodes,
+    handleModifySelected,
+    handleOptimizeSelectedNode,
+    handleDecompose,
+    handleGenerateGroupTasks,
+  } = useRecordNodeAiTasks({
+    currentRecordId,
+    nodes,
+    edges,
+    projectName,
+    language,
+    mode,
+    provider: activeProvider,
+    defaultPathType,
+    connectionMode,
+    selectedPrompt,
+    decomposePrompt,
+    selectedNodeId,
+    setNodes,
+    setEdges,
+    setProjectName,
+    takeSnapshot,
+    showStatus,
+    hydrateTaskData,
+    ensureCurrentRecordSnapshot,
+    updateRecord,
+  });
+
+  const decorateNodesWithAiState = useCallback((recordId: string | null, sourceNodes: Node[]) => {
+    if (!recordId) return sourceNodes;
+
+    const runningNodeIds = new Set(recordAiStates[recordId]?.runningNodeIds || []);
+    let changed = false;
+
+    const nextNodes = sourceNodes.map((node) => {
+      const nodeData = (node.data || {}) as TaskData;
+      const isAiProcessing = runningNodeIds.has(node.id);
+      const hasAbortAction = Boolean(nodeData.onAbortAiTask);
+
+      if (!isAiProcessing && !nodeData.isAiProcessing && !hasAbortAction) {
+        return node;
+      }
+
+      changed = true;
+      return {
+        ...node,
+        data: {
+          ...nodeData,
+          isAiProcessing,
+          onAbortAiTask: isAiProcessing
+            ? (nodeId: string) => abortTasksForRecordNodes(recordId, [nodeId])
+            : undefined,
+        },
+      };
+    });
+
+    return changed ? nextNodes : sourceNodes;
+  }, [abortTasksForRecordNodes, recordAiStates]);
 
   const handleLoadFromLocal = useCallback((record: ProjectRecord) => {
-    const hydratedNodes = record.nodes.map((n: Node) => ({
+    abortAiBeforeCanvasSwitchRef.current();
+
+    const baseHydratedNodes = record.nodes.map((n: Node) => ({
       ...n,
+      selected: false,
+      extent: n.parentId ? undefined : n.extent,
       data: {
-        ...n.data,
+        ...clearTransientNodeData((n.data || {}) as Record<string, unknown>),
         language: record.language || language,
         onStatusChange: handleStatusChange,
         onUpdateData: handleUpdateNodeData,
@@ -433,6 +550,7 @@ export default function App() {
         onUngroup: n.type === 'group' ? (id: string) => handleUngroup(id) : (n.data as any)?.onUngroup,
       }
     }));
+    const hydratedNodes = decorateNodesWithAiState(record.id, baseHydratedNodes);
     
     const finalNodeIds = hydratedNodes.map((n: Node) => n.id);
     const finalEdges = record.edges.filter(e => finalNodeIds.includes(e.source) && finalNodeIds.includes(e.target));
@@ -444,9 +562,24 @@ export default function App() {
     setHistory(createHistory({ nodes: hydratedNodes, edges: finalEdges }));
     setShowStartDialog(false);
     setSelectedNodeId(null); setSelectedEdgeId(null);
+
+    const recordAiState = recordAiStates[record.id];
+    if (recordAiState?.unread) {
+      if (recordAiState.latestStatus && recordAiState.latestMessage) {
+        showStatus(
+          recordAiState.latestMessage,
+          recordAiState.latestStatus === 'success'
+            ? <CheckCircle2 className="w-3.5 h-3.5" />
+            : <AlertCircle className="w-3.5 h-3.5" />,
+        );
+      }
+
+      markRecordAiStateSeen(record.id);
+    }
+
     setImportStatus('success'); setImportMessage(language === 'zh' ? `已载入: ${record.name}` : `Loaded: ${record.name}`);
     setTimeout(() => { setImportStatus('idle'); }, 3000);
-  }, [language, handleStatusChange, handleUpdateNodeData, handleOpenNodeToolPanel, handleNodeAdd, setNodes, setEdges, setLanguage, setMode, setProjectName, setHistory, setShowStartDialog, setCurrentRecordId]);
+  }, [language, handleStatusChange, handleUpdateNodeData, handleOpenNodeToolPanel, handleNodeAdd, decorateNodesWithAiState, recordAiStates, showStatus, markRecordAiStateSeen, setNodes, setEdges, setLanguage, setMode, setProjectName, setHistory, setShowStartDialog, setCurrentRecordId]);
 
   const {
     handleCopy,
@@ -474,6 +607,7 @@ export default function App() {
     nodes,
     edges,
     language,
+    mode,
     defaultPathType,
     connectionMode,
     clipboard,
@@ -501,6 +635,7 @@ export default function App() {
   });
 
   const handleCreateNewProject = useCallback(() => {
+    abortAiBeforeCanvasSwitchRef.current();
     handleNewProject();
   }, [handleNewProject]);
 
@@ -517,15 +652,19 @@ export default function App() {
       return;
     }
 
-    handleNewProject();
-  }, [currentRecordId, localRecords, deleteRecord, handleLoadFromLocal, handleNewProject]);
+    handleCreateNewProject();
+  }, [currentRecordId, localRecords, deleteRecord, handleLoadFromLocal, handleCreateNewProject]);
 
   const handleStartManually = useCallback(() => {
     ensureCurrentRecord();
     setShowStartDialog(false);
   }, [ensureCurrentRecord]);
 
-  const { saveFile: exportProjectFile, loadFile: handleLoadFile } = useProjectFileIO({
+  const handleDismissStartDialog = useCallback(() => {
+    setShowStartDialog(false);
+  }, []);
+
+  const { saveFile: exportProjectFile, loadFile: handleLoadFile, loadProjectFile } = useProjectFileIO({
     nodes,
     edges,
     projectName,
@@ -548,17 +687,85 @@ export default function App() {
     setImportStatus,
     setImportMessage,
     fileInputRef,
+    onImportSuccess: () => setShowStartDialog(false),
   });
 
+  const handleLoadProjectFileWithAiReset = useCallback((file: File) => {
+    abortAiBeforeCanvasSwitchRef.current();
+    loadProjectFile(file);
+  }, [loadProjectFile]);
+
+  const handleLoadFileWithAiReset = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    abortAiBeforeCanvasSwitchRef.current();
+    handleLoadFile(event);
+  }, [handleLoadFile]);
+
+  useEffect(() => {
+    if (!currentRecordId) return;
+    setNodes((currentNodes) => decorateNodesWithAiState(currentRecordId, currentNodes));
+  }, [currentRecordId, decorateNodesWithAiState, recordAiStates, setNodes]);
+
+  useEffect(() => {
+    const isProjectFileDrag = (transfer: DataTransfer | null) => {
+      if (!transfer) return false;
+      const types = Array.from(transfer.types || []);
+      return types.includes('Files');
+    };
+
+    const resetFileDragState = () => {
+      fileDragDepthRef.current = 0;
+      setIsFileDragActive(false);
+    };
+
+    const handleDragEnter = (event: DragEvent) => {
+      if (!isProjectFileDrag(event.dataTransfer)) return;
+      event.preventDefault();
+      fileDragDepthRef.current += 1;
+      setIsFileDragActive(true);
+    };
+
+    const handleDragOver = (event: DragEvent) => {
+      if (!isProjectFileDrag(event.dataTransfer)) return;
+      event.preventDefault();
+    };
+
+    const handleDragLeave = (event: DragEvent) => {
+      if (!isProjectFileDrag(event.dataTransfer)) return;
+      event.preventDefault();
+      fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+      if (fileDragDepthRef.current === 0) {
+        setIsFileDragActive(false);
+      }
+    };
+
+    const handleDrop = (event: DragEvent) => {
+      if (!isProjectFileDrag(event.dataTransfer)) return;
+      event.preventDefault();
+      const droppedFiles = Array.from(event.dataTransfer?.files || []);
+      const file = droppedFiles.find((item) => /\.json$/i.test(item.name) || item.type === 'application/json') || droppedFiles[0];
+      resetFileDragState();
+      if (file) {
+        handleLoadProjectFileWithAiReset(file);
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter, true);
+    window.addEventListener('dragover', handleDragOver, true);
+    window.addEventListener('dragleave', handleDragLeave, true);
+    window.addEventListener('drop', handleDrop, true);
+
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter, true);
+      window.removeEventListener('dragover', handleDragOver, true);
+      window.removeEventListener('dragleave', handleDragLeave, true);
+      window.removeEventListener('drop', handleDrop, true);
+    };
+  }, [handleLoadProjectFileWithAiReset]);
+
   const {
-    isLoading,
-    isNodeAiLoading,
-    handleAbort,
+    isLoading: isPlanLoading,
+    handleAbort: handleAbortPlanGeneration,
     handleGenerate,
-    handleModify,
-    handleDecompose,
-    handleModifySelected,
-    handleGenerateGroupTasks,
   } = useAiOrchestration({
     nodes,
     edges,
@@ -581,11 +788,30 @@ export default function App() {
     showStatus,
     hydrateTaskData,
     onStreamingChange: setStreamingContent,
+    onPlanRequestSettled: ({ status }) => setPlanGenerationOutcome(status),
+    onViewportRequest: ({ scope, nodeIds }) => {
+      setPendingAiViewportRequest({
+        nonce: Date.now(),
+        scope,
+        nodeIds,
+      });
+    },
   });
+
+  const stopAiBeforeCanvasSwitch = useCallback(() => {
+    handleAbortPlanGeneration();
+    resetPlanGenerationUi();
+  }, [handleAbortPlanGeneration, resetPlanGenerationUi]);
+
+  useEffect(() => {
+    abortAiBeforeCanvasSwitchRef.current = stopAiBeforeCanvasSwitch;
+  }, [stopAiBeforeCanvasSwitch]);
 
   const handleGenerateWithRecord = useCallback(() => {
     if (!prompt.trim()) return;
-    const recordId = ensureCurrentRecord();
+    const hasCanvasContent = nodes.length > 0 || edges.length > 0;
+    const shouldReserveRecordSlot = Boolean(currentRecordIdRef.current) || hasCanvasContent;
+    const recordId = shouldReserveRecordSlot ? ensureCurrentRecord() : null;
     // 关闭对话框（触发 AnimatePresence exit 动画）
     setShowStartDialog(false);
     // 立即显示 AI 生成卡片
@@ -594,13 +820,29 @@ export default function App() {
     setStreamingContent('');
     setIsGeneratingPlan(true);
     setHideGeneratingRecord(true);
+    setPlanGenerationOutcome('running');
     // 开始 AI 生成
     handleGenerate();
-  }, [prompt, ensureCurrentRecord, handleGenerate]);
+  }, [prompt, nodes.length, edges.length, ensureCurrentRecord, handleGenerate]);
 
   const handlePrepareGenerate = useCallback(() => {
-    ensureCurrentRecord();
-  }, [ensureCurrentRecord]);
+    const hasCanvasContent = nodes.length > 0 || edges.length > 0;
+    if (currentRecordIdRef.current || hasCanvasContent) {
+      ensureCurrentRecord();
+    }
+  }, [nodes.length, edges.length, ensureCurrentRecord]);
+
+  const handleSingleNodeAiAction = useCallback(() => {
+    const selectedNode = nodes.find((node) => node.id === selectedNodeId);
+    if (!selectedNode) return;
+
+    if (selectedNode.type === 'group') {
+      handleGenerateGroupTasks();
+      return;
+    }
+
+    handleOptimizeSelectedNode();
+  }, [nodes, selectedNodeId, handleGenerateGroupTasks, handleOptimizeSelectedNode]);
 
   const {
     alignNodes,
@@ -610,33 +852,83 @@ export default function App() {
     nodes,
     edges,
     language,
+    mode,
     setNodes,
     takeSnapshot,
     showStatus,
   });
 
-  // 监听 AI 生成完成（包括中止），清理生成中状态
-  // 关键：只在 isLoading 从 true 变为 false 时触发清理
-  const wasLoadingRef = React.useRef(false);
   useEffect(() => {
-    if (wasLoadingRef.current && !isLoading && isGeneratingPlan) {
+    if (isPlanLoading || !isGeneratingPlan) return;
+
+    if (planGenerationOutcome === 'success') {
       // AI 生成刚完成：绿光扫过 -> 淡出 -> 新记录显现
       // 立即保存一次，确保记录卡片显现时就是最新标题/内容，而不是等待自动保存节流。
       saveToLocal();
       setIsGeneratingPlanCompleting(true);
       const timeoutId = setTimeout(() => {
-        setIsGeneratingPlan(false);
-        setIsGeneratingPlanCompleting(false);
-        setStreamingContent(''); // 清理流式内容
-        setHideGeneratingRecord(false);
-        setGeneratingRecordId(null);
+        resetPlanGenerationUi();
       }, 1150);
       return () => {
         clearTimeout(timeoutId);
       };
     }
-    wasLoadingRef.current = isLoading;
-  }, [isLoading, isGeneratingPlan, saveToLocal]);
+
+    if (planGenerationOutcome === 'aborted' || planGenerationOutcome === 'error') {
+      const timeoutId = setTimeout(() => {
+        resetPlanGenerationUi();
+      }, 120);
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [isPlanLoading, isGeneratingPlan, planGenerationOutcome, resetPlanGenerationUi, saveToLocal]);
+
+  useEffect(() => {
+    if (!pendingAiViewportRequest) return;
+
+    if (nodes.length === 0) return;
+
+    const targetIds = pendingAiViewportRequest.nodeIds?.filter((id, index, array) => array.indexOf(id) === index) ?? [];
+    if (pendingAiViewportRequest.scope === 'nodes' && targetIds.length > 0) {
+      const availableIds = new Set(nodes.map((node) => node.id));
+      if (targetIds.some((id) => !availableIds.has(id))) return;
+    }
+
+    let firstFrame = 0;
+    let secondFrame = 0;
+
+    const runFitView = () => {
+      secondFrame = window.requestAnimationFrame(() => {
+        const fitOptions = pendingAiViewportRequest.scope === 'nodes' && targetIds.length > 0
+          ? {
+              nodes: targetIds.map((id) => ({ id })),
+              duration: 560,
+              padding: 0.28,
+              minZoom: 0.38,
+              maxZoom: 1.05,
+            }
+          : {
+              duration: 620,
+              padding: 0.24,
+              minZoom: 0.32,
+              maxZoom: 1.02,
+            };
+
+        void fitView(fitOptions);
+        setPendingAiViewportRequest((current) => (
+          current?.nonce === pendingAiViewportRequest.nonce ? null : current
+        ));
+      });
+    };
+
+    firstFrame = window.requestAnimationFrame(runFitView);
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [fitView, nodes, pendingAiViewportRequest]);
 
   const getDefaultExportFileName = useCallback(
     () => projectName.replace(/\.(json|zip|txt)$/i, '').trim() || 'YesFlow Project',
@@ -708,6 +1000,13 @@ export default function App() {
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
   const selectedNodes = nodes.filter(n => n.selected);
+  const selectedNodeIds = selectedNodes.map((node) => node.id);
+  const isSelectedNodeAiLoading = Boolean(selectedNodeId) && isRecordTaskRunning(currentRecordId, selectedNodeId ? [selectedNodeId] : []);
+  const isSelectedBatchAiLoading = selectedNodeIds.length > 0 && isRecordTaskRunning(currentRecordId, selectedNodeIds);
+  const handleAbortSelectedNodeAi = useCallback(() => {
+    if (!currentRecordId || selectedNodeIds.length === 0) return;
+    abortTasksForRecordNodes(currentRecordId, selectedNodeIds);
+  }, [abortTasksForRecordNodes, currentRecordId, selectedNodeIds]);
   const activeEdges = useEdgeHighlighting({
     nodes,
     edges,
@@ -722,7 +1021,33 @@ export default function App() {
   });
 
   return (
-    <div className={`app-shell theme-${settings.themeMode} relative h-screen w-full bg-neutral-50 overflow-hidden font-sans`}>
+    <AppErrorBoundary>
+      <div className={`app-shell theme-${settings.themeMode} relative h-screen w-full bg-neutral-50 overflow-hidden font-sans`}>
+      <AnimatePresence>
+        {isFileDragActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-none absolute inset-4 z-[160] rounded-[2rem] border-2 border-dashed border-primary/30 bg-white/70 backdrop-blur-xl"
+          >
+            <div className="flex h-full items-center justify-center">
+              <div className="rounded-[1.75rem] border border-primary/15 bg-white/92 px-8 py-6 text-center shadow-[0_32px_90px_-40px_rgba(37,99,235,0.45)]">
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">
+                  {language === 'zh' ? '拖入导入' : 'Drop To Import'}
+                </div>
+                <div className="mt-3 text-2xl font-black text-neutral-900">
+                  {language === 'zh' ? '松开即可打开项目文件' : 'Release to open the project file'}
+                </div>
+                <div className="mt-2 text-sm text-neutral-500">
+                  {language === 'zh' ? '支持拖入 YesFlow 导出的 JSON 文件' : 'Supports YesFlow JSON export files'}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* --- Floating Sidebar Container --- */}
       <div className="absolute inset-y-0 left-0 z-40 pointer-events-none flex flex-row items-stretch">
         <motion.aside 
@@ -733,7 +1058,7 @@ export default function App() {
           <SidebarPanel
             language={language}
             themeMode={themeMode}
-            isLoading={isLoading}
+            isBatchAiLoading={isSelectedBatchAiLoading}
             hasApiKey={hasApiKey}
             activeProviderName={activeProviderName}
             settings={settings}
@@ -745,6 +1070,7 @@ export default function App() {
             currentRecordId={currentRecordId}
             nodes={nodes}
             edges={edges}
+            mode={mode}
             onNewProject={handleCreateNewProject}
             onDeleteSelectedEdge={handleDeleteSelectedEdge}
             onUpdateSelectedEdgeLabel={handleUpdateSelectedEdgeLabel}
@@ -758,7 +1084,8 @@ export default function App() {
             }}
             onSelectedPromptChange={setSelectedPrompt}
             onModifySelected={handleModifySelected}
-            onAbort={handleAbort}
+            onAbortSelectedAi={handleAbortSelectedNodeAi}
+            onAbortPlanGeneration={handleAbortPlanGeneration}
             onLoadRecord={handleLoadFromLocal}
             onDeleteRecord={handleDeleteRecord}
             onReorderRecords={reorderRecords}
@@ -772,6 +1099,7 @@ export default function App() {
             streamingContent={streamingContent}
             hideGeneratingRecord={hideGeneratingRecord}
             onGeneratingCardAnchorRectChange={setGeneratingCardTargetRect}
+            recordAiStates={recordAiStates}
           />
         </motion.aside>
         <SidebarToggle
@@ -828,12 +1156,13 @@ export default function App() {
         />
       </div>
 
-      <NodeSettingsContext.Provider value={{ 
+      <NodeSettingsContext.Provider value={useMemo(() => ({
         completedStyle: settings.completedStyle || 'logo',
         visuals: settings.visuals,
         themeMode: settings.themeMode,
         nodeTools: settings.nodeTools,
-      }}>
+        mode,
+      }), [settings.completedStyle, settings.visuals, settings.themeMode, settings.nodeTools, mode])}>
         <FlowCanvas
           selectionBox={selectionBox}
           transform={store.getState().transform}
@@ -893,6 +1222,7 @@ export default function App() {
           onSaveToLocal={handleSaveToLocal}
           onSaveFile={handleOpenExportFileModal}
           onOpenFile={() => fileInputRef.current?.click()}
+          onModeChange={setMode}
           defaultPathType={defaultPathType}
           onApplyPathTypeToAll={handleApplyDefaultPathType}
           connectionMode={connectionMode}
@@ -920,11 +1250,11 @@ export default function App() {
           onDecomposePromptChange={setDecomposePrompt}
           onToggleDecompose={() => setShowDecomposeInput(!showDecomposeInput)}
           onRunDecompose={() => { handleDecompose(); setShowDecomposeInput(false); }}
-          isNodeAiLoading={isNodeAiLoading}
+          isNodeAiLoading={isSelectedNodeAiLoading}
           onGroup={handleGroupSelection}
           onUngroup={handleUngroup}
           onExitSelectedFromGroup={handleExitSelectedFromGroup}
-          onGenerateGroupTasks={handleGenerateGroupTasks}
+          onGenerateGroupTasks={handleSingleNodeAiAction}
           onDeleteSelectedSingle={handleDeleteNodeLocal}
           onAlignNodes={alignNodes}
           onDistributeNodes={distributeNodes}
@@ -932,9 +1262,9 @@ export default function App() {
           selectedPrompt={selectedPrompt}
           onSelectedPromptChange={setSelectedPrompt}
           onModifySelected={handleModifySelected}
-          isLoading={isLoading}
+          isLoading={isSelectedBatchAiLoading}
           onDeleteSelectedMany={() => deleteNodesAndReconnect(selectedNodes.map(n => n.id))}
-          onAbort={handleAbort}
+          onAbort={handleAbortSelectedNodeAi}
         />
 
         <StatusIndicators
@@ -950,7 +1280,7 @@ export default function App() {
           onDismissImport={() => setImportStatus('idle')}
         />
 
-        <input type="file" ref={fileInputRef} onChange={handleLoadFile} accept=".json,application/json" style={{ display: 'none' }} />
+        <input type="file" ref={fileInputRef} onChange={handleLoadFileWithAiReset} accept=".json,application/json" style={{ display: 'none' }} />
       </NodeSettingsContext.Provider>
 
       {/* Settings Modal */}
@@ -973,7 +1303,7 @@ export default function App() {
         language={language}
         mode={mode}
         prompt={prompt}
-        isLoading={isLoading}
+        isLoading={isPlanLoading}
         title={t.startQuestion}
         placeholder={t.placeholderEmpty}
         dailyModeLabel={t.dailyMode}
@@ -985,8 +1315,9 @@ export default function App() {
         onPrepareGenerate={handlePrepareGenerate}
         targetRecordRect={generatingCardTargetRect}
         onGenerate={handleGenerateWithRecord}
-        onAbort={handleAbort}
-        onClose={handleStartManually}
+        onAbort={handleAbortPlanGeneration}
+        onManualStart={handleStartManually}
+        onDismiss={handleDismissStartDialog}
       />
 
       <ExportFileModal
@@ -1006,6 +1337,7 @@ export default function App() {
         onClose={() => setIsConfigModalOpen(false)}
         onSkip={() => { setIsConfigModalOpen(false); setShowStartDialog(false); }}
       />
-    </div>
+      </div>
+    </AppErrorBoundary>
   );
 }

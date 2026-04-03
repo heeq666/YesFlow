@@ -17,7 +17,7 @@ import TopToolbar from './TopToolbar';
 import { HelperLines } from './HelperLines';
 import { edgeTypes, nodeTypes as baseNodeTypes } from '../constants/flowConfig';
 import type { HelperLines as HelperLinesType } from '../utils/helperLineUtils';
-import type { ConnectionMode, NodePreset, ThemeMode } from '../types';
+import type { ConnectionMode, NodePreset, TaskMode, ThemeMode } from '../types';
 
 const nodeTypes = {
   ...baseNodeTypes,
@@ -30,7 +30,7 @@ type FlowCanvasProps = {
   nodes: Node[];
   activeEdges: Edge[];
   helperLines: HelperLinesType;
-  mode: 'daily' | 'professional';
+  mode: TaskMode;
   themeMode: ThemeMode;
   showCanvasGrid: boolean;
   edgeColor: string;
@@ -64,6 +64,7 @@ type FlowCanvasProps = {
   onSaveToLocal: () => void;
   onSaveFile: () => void;
   onOpenFile: () => void;
+  onModeChange: (mode: TaskMode) => void;
   defaultPathType: string;
   onApplyPathTypeToAll: (pathType: string) => void;
   connectionMode: ConnectionMode;
@@ -117,6 +118,7 @@ export default function FlowCanvas({
   onSaveToLocal,
   onSaveFile,
   onOpenFile,
+  onModeChange,
   defaultPathType,
   onApplyPathTypeToAll,
   connectionMode,
@@ -193,6 +195,8 @@ export default function FlowCanvas({
           onSaveToLocal={onSaveToLocal}
           onSaveFile={onSaveFile}
           onOpenFile={onOpenFile}
+          mode={mode}
+          onModeChange={onModeChange}
           defaultPathType={defaultPathType}
           onApplyPathTypeToAll={onApplyPathTypeToAll}
           connectionMode={connectionMode}

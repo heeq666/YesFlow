@@ -3,15 +3,17 @@ import type React from 'react';
 import { addEdge, MarkerType, type Edge, type Node, type OnConnectEnd } from '@xyflow/react';
 import { Check, LayoutDashboard, Tag, X } from 'lucide-react';
 
+import { getTaskNodeLayout } from '../constants/taskNodeLayout';
 import type { HelperLines } from '../utils/helperLineUtils';
 import { getNodeAbsolutePosition, getGroupBounds } from '../utils/nodeUtils';
 import { createHistory, pushToHistory, type HistoryState } from '../utils/historyUtils';
-import type { ConnectionMode, NodePreset, ProjectRecord, TaskData } from '../types';
+import type { ConnectionMode, NodePreset, ProjectRecord, TaskData, TaskMode } from '../types';
 
 type UseCanvasActionsParams = {
   nodes: Node[];
   edges: Edge[];
   language: 'zh' | 'en';
+  mode: TaskMode;
   defaultPathType: string;
   connectionMode: ConnectionMode;
   clipboard: { nodes: Node[]; edges: Edge[] } | null;
@@ -42,6 +44,7 @@ export function useCanvasActions({
   nodes,
   edges,
   language,
+  mode,
   defaultPathType,
   connectionMode,
   clipboard,
@@ -67,6 +70,7 @@ export function useCanvasActions({
   cancelConnection,
   isConnectionInProgress,
 }: UseCanvasActionsParams) {
+  const taskNodeLayout = getTaskNodeLayout(mode);
   const connectStartParams = useRef<{ nodeId: string; handleId: string | null; handleType?: 'source' | 'target'; time?: number } | null>(null);
   const draggingOverGroupIdRef = useRef<string | null>(null);
   const dragHoverRafRef = useRef<number | null>(null);
@@ -182,6 +186,7 @@ export function useCanvasActions({
         ...node,
         id: newId,
         position: { x: node.position.x + 40, y: node.position.y + 40 },
+        extent: node.parentId ? undefined : node.extent,
         selected: true,
         data: hydrateTaskData(node.data as Partial<TaskData>),
       };
@@ -379,7 +384,10 @@ export function useCanvasActions({
       const newNode: Node = {
         id: nodeIdNew,
         type: 'task',
-        position: { x: dropPosition.x - 130, y: dropPosition.y - 70 },
+        position: {
+          x: dropPosition.x - taskNodeLayout.width / 2,
+          y: dropPosition.y - taskNodeLayout.height / 2,
+        },
         selected: true,
         data: hydrateTaskData({ label: '', description: '', type: 'execution', status: 'pending' }),
       };
@@ -412,7 +420,7 @@ export function useCanvasActions({
     } finally {
       connectStartParams.current = null;
     }
-  }, [screenToFlowPosition, hydrateTaskData, defaultPathType, connectionMode, setNodes, setEdges, takeSnapshot]);
+  }, [screenToFlowPosition, hydrateTaskData, defaultPathType, connectionMode, setNodes, setEdges, takeSnapshot, taskNodeLayout.height, taskNodeLayout.width]);
 
   const handleAddPresetNode = useCallback((preset: NodePreset) => {
     const id = `node-${Date.now()}`;
@@ -444,11 +452,12 @@ export function useCanvasActions({
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    event.dataTransfer.dropEffect = event.dataTransfer.files?.length ? 'copy' : 'move';
   }, []);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
+    if (event.dataTransfer.files?.length) return;
     const rawData = event.dataTransfer.getData('application/reactflow');
     if (!rawData) return;
 
@@ -593,7 +602,7 @@ export function useCanvasActions({
                   x: Math.round(nodeAbsPos.x - groupUnder.position.x), 
                   y: Math.round(nodeAbsPos.y - groupUnder.position.y) 
                 },
-                extent: 'parent' as const,
+                extent: undefined,
                 zIndex: 0,
                 data: { ...n.data, isDraggingOver: false }
               };
@@ -701,7 +710,7 @@ export function useCanvasActions({
               x: Math.round(selectedInfo.absPos.x - groupPos.x), 
               y: Math.round(selectedInfo.absPos.y - groupPos.y) 
             },
-            extent: 'parent' as const,
+            extent: undefined,
             selected: false
           };
         }

@@ -5,7 +5,7 @@ export type NodeStatus = 'pending' | 'in-progress' | 'completed' | 'failed';
 export type TaskMode = 'daily' | 'professional';
 export type ConnectionMode = 'auto' | 'fixed';
 export type ThemeMode = 'light' | 'dark';
-export type NodeToolType = 'table' | 'document' | 'link' | 'schedule';
+export type NodeToolType = 'table' | 'document' | 'link' | 'schedule' | 'image';
 export type CalendarViewMode = 'month' | 'agenda';
 
 export interface NodeTableRow {
@@ -35,6 +35,18 @@ export interface NodeLinkData {
   items: NodeLinkItem[];
 }
 
+export interface NodeImageItem {
+  id: string;
+  title: string;
+  src: string;
+  alt: string;
+}
+
+export interface NodeImageData {
+  enabled: boolean;
+  items: NodeImageItem[];
+}
+
 export type ScheduleTimeType = 'start' | 'end' | 'custom';
 
 // 单个时间项
@@ -58,6 +70,7 @@ export interface NodeToolsState {
   document?: NodeDocumentData;
   link?: NodeLinkData;
   schedule?: NodeSchedule;
+  image?: NodeImageData;
 }
 
 export interface TaskData {
@@ -77,6 +90,7 @@ export interface TaskData {
   onAddNode?: (e: React.MouseEvent, id: string, position: 'top' | 'bottom' | 'left' | 'right') => void;
   onUpdateData?: (id: string, updates: Partial<TaskData>) => void;
   onOpenToolPanel?: (id: string, tool: NodeToolType) => void;
+  onAbortAiTask?: (id: string) => void;
   onUngroup?: (id: string) => void;
 }
 
@@ -196,4 +210,12 @@ export interface ProjectRecord {
   language: 'zh' | 'en';
   mode: TaskMode;
   lastModified: number;
+}
+
+export interface RecordAiState {
+  runningNodeIds: string[];
+  latestStatus?: 'success' | 'error';
+  latestMessage?: string;
+  latestUpdatedAt?: number;
+  unread?: boolean;
 }

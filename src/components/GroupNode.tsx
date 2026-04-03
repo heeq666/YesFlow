@@ -6,7 +6,7 @@ import { type GroupData, type ThemeMode } from '../types';
 import { NodeSettingsContext } from '../contexts/NodeSettingsContext';
 import { HANDLE_DOT_SIZE, getUnifiedHandleStyle } from '../constants/handleGeometry';
 
-export default function GroupNode({ id, data, selected }: NodeProps & { data: GroupData }) {
+export default React.memo(function GroupNode({ id, data, selected }: NodeProps & { data: GroupData }) {
   const isDraggingOver = Boolean(data.isDraggingOver);
   const color = (data.color as string) || 'violet';
   const context = React.useContext(NodeSettingsContext);
@@ -173,4 +173,4 @@ export default function GroupNode({ id, data, selected }: NodeProps & { data: Gr
       <div className="w-full h-full min-h-[100px] min-w-[200px]" />
     </motion.div>
   );
-}
+});

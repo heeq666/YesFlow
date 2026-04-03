@@ -1,16 +1,16 @@
 import dagre from 'dagre';
 import type { Edge, Node } from '@xyflow/react';
+import type { TaskMode } from '../types';
+import { getTaskNodeLayout } from '../constants/taskNodeLayout';
 
-const NODE_WIDTH = 260;
-const NODE_HEIGHT = 140;
-
-export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => {
+export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB', mode: TaskMode = 'professional') => {
+  const layout = getTaskNodeLayout(mode);
   const dagreGraph = new dagre.graphlib.Graph({ compound: true });
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({ rankdir: direction, nodesep: 50, ranksep: 50 });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    dagreGraph.setNode(node.id, { width: layout.layoutWidth, height: layout.layoutHeight });
   });
 
   edges.forEach((edge) => dagreGraph.setEdge(edge.source, edge.target));
@@ -19,8 +19,8 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'T
 
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
-    let x = nodeWithPosition.x - NODE_WIDTH / 2;
-    let y = nodeWithPosition.y - NODE_HEIGHT / 2;
+    let x = nodeWithPosition.x - layout.layoutWidth / 2;
+    let y = nodeWithPosition.y - layout.layoutHeight / 2;
 
     if (node.parentId) {
       const parentWithPosition = dagreGraph.node(node.parentId);

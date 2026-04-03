@@ -10,6 +10,18 @@ export default function ChangelogModal({ onClose }: ChangelogModalProps) {
   const isDarkTheme = typeof document !== 'undefined' && document.documentElement.style.colorScheme === 'dark';
   const changelog = [
     {
+      version: "0.3.1",
+      date: "2026-04-03",
+      changes: [
+        { type: "added", text: "节点工具新增图片工作区，支持上传本地图片或直接粘贴线上图片链接。" },
+        { type: "added", text: "项目记录现在会跟踪各自的 AI 运行状态，切回项目时也能看到完成或失败提醒。" },
+        { type: "changed", text: "任务节点尺寸与布局参数抽成统一常量，画布编排、编组子任务和 AI 生成位置更一致。" },
+        { type: "fixed", text: "项目保存与导出前会清理临时 UI / AI 运行字段，记录与 JSON 文件更干净稳定。" },
+        { type: "fixed", text: "应用加入运行时错误边界，异常时优先展示错误面板，避免直接白屏。" },
+        { type: "changed", text: "README、设置页介绍、元数据与版本说明同步更新到 0.3.1。" },
+      ]
+    },
+    {
       version: "0.3.0",
       date: "2026-04-03",
       changes: [

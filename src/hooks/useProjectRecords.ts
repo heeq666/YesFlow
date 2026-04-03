@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type React from 'react';
 import type { Edge, Node } from '@xyflow/react';
 
 import type { ProjectRecord, TaskMode } from '../types';
+import { sanitizeNodeForPersistence } from '../utils/nodePersistence';
 
 type UseProjectRecordsParams = {
   nodes: Node[];
@@ -21,11 +23,6 @@ type BuildRecordOverrides = {
 };
 
 const STORAGE_KEY = 'orchestra-ai-records';
-
-function stripNodeHandlers(node: Node): Node {
-  const { onStatusChange, onUpdateData, onOpenToolPanel, onAddNode, onUngroup, ...cleanData } = (node.data || {}) as Record<string, unknown>;
-  return { ...node, data: cleanData };
-}
 
 function upsertRecord(
   prev: ProjectRecord[],
@@ -50,7 +47,24 @@ export function useProjectRecords({
   mode,
 }: UseProjectRecordsParams) {
   const [localRecords, setLocalRecords] = useState<ProjectRecord[]>([]);
-  const [currentRecordId, setCurrentRecordId] = useState<string | null>(null);
+  const [currentRecordIdState, setCurrentRecordIdState] = useState<string | null>(null);
+  const currentRecordIdRef = useRef<string | null>(null);
+  const localRecordsRef = useRef<ProjectRecord[]>([]);
+
+  const setCurrentRecordId = useCallback((value: React.SetStateAction<string | null>) => {
+    const nextValue = typeof value === 'function'
+      ? (value as (prev: string | null) => string | null)(currentRecordIdRef.current)
+      : value;
+
+    currentRecordIdRef.current = nextValue;
+    setCurrentRecordIdState(nextValue);
+  }, []);
+
+  const currentRecordId = currentRecordIdState;
+
+  useEffect(() => {
+    localRecordsRef.current = localRecords;
+  }, [localRecords]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -82,7 +96,7 @@ export function useProjectRecords({
     return {
       id: overrides.id || `rec-${Date.now()}`,
       name: cleanName,
-      nodes: nextNodes.map(stripNodeHandlers),
+      nodes: nextNodes.map(sanitizeNodeForPersistence),
       edges: nextEdges,
       language: overrides.language ?? language,
       mode: overrides.mode ?? mode,
@@ -98,11 +112,23 @@ export function useProjectRecords({
   }, [buildRecord, persistRecords]);
 
   const saveToLocal = useCallback(() => {
-    const record = buildRecord({ id: currentRecordId });
+    const record = buildRecord({ id: currentRecordIdRef.current });
     persistRecords((prev) => upsertRecord(prev, record, { insertAtFront: true }));
     setCurrentRecordId(record.id);
     return record;
-  }, [buildRecord, currentRecordId, persistRecords]);
+  }, [buildRecord, persistRecords, setCurrentRecordId]);
+
+  const persistCurrentRecordImmediately = useCallback((options: { insertAtFront?: boolean } = {}) => {
+    const hasCanvasContent = nodes.length > 0 || edges.length > 0;
+    const activeRecordId = currentRecordIdRef.current;
+
+    if (!activeRecordId && !hasCanvasContent) return null;
+
+    const record = buildRecord({ id: activeRecordId });
+    persistRecords((prev) => upsertRecord(prev, record, { insertAtFront: options.insertAtFront ?? !activeRecordId }));
+    setCurrentRecordId(record.id);
+    return record;
+  }, [buildRecord, edges.length, nodes.length, persistRecords, setCurrentRecordId]);
 
   const deleteRecord = useCallback((recordId: string) => {
     persistRecords((prev) => prev.filter((item) => item.id !== recordId));
@@ -129,25 +155,57 @@ export function useProjectRecords({
     });
   }, [persistRecords]);
 
+  const getRecordById = useCallback((recordId: string) => (
+    localRecordsRef.current.find((record) => record.id === recordId) || null
+  ), []);
+
+  const updateRecord = useCallback((recordId: string, updater: (record: ProjectRecord) => ProjectRecord | null) => {
+    let updatedRecord: ProjectRecord | null = null;
+
+    persistRecords((prev) => prev.map((record) => {
+      if (record.id !== recordId) return record;
+
+      const nextRecord = updater(record);
+      if (!nextRecord) return record;
+
+      updatedRecord = {
+        ...nextRecord,
+        id: recordId,
+        nodes: nextRecord.nodes.map(sanitizeNodeForPersistence),
+        edges: nextRecord.edges,
+        lastModified: nextRecord.lastModified || Date.now(),
+      };
+
+      return updatedRecord;
+    }));
+
+    return updatedRecord;
+  }, [persistRecords]);
+
   useEffect(() => {
     const hasCanvasContent = nodes.length > 0 || edges.length > 0;
+    const activeRecordId = currentRecordIdRef.current;
 
-    if (!currentRecordId && !hasCanvasContent) return;
+    if (!activeRecordId && !hasCanvasContent) return;
 
-    if (!currentRecordId && hasCanvasContent) {
-      const record = buildRecord();
-      persistRecords((prev) => upsertRecord(prev, record, { insertAtFront: true }));
-      setCurrentRecordId(record.id);
+    if (!activeRecordId && hasCanvasContent) {
+      persistCurrentRecordImmediately({ insertAtFront: true });
       return;
     }
 
     const timer = setTimeout(() => {
-      const record = buildRecord({ id: currentRecordId });
+      const record = buildRecord({ id: currentRecordIdRef.current });
       persistRecords((prev) => upsertRecord(prev, record, { insertAtFront: false }));
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [nodes, edges, currentRecordId, buildRecord, persistRecords]);
+  }, [nodes, edges, buildRecord, persistCurrentRecordImmediately, persistRecords]);
+
+  useEffect(() => {
+    if (!currentRecordIdRef.current) return;
+
+    persistCurrentRecordImmediately({ insertAtFront: false });
+  }, [projectName, language, mode, persistCurrentRecordImmediately]);
 
   return {
     localRecords,
@@ -157,5 +215,7 @@ export function useProjectRecords({
     saveToLocal,
     deleteRecord,
     reorderRecords,
+    getRecordById,
+    updateRecord,
   };
 }

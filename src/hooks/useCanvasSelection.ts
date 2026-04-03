@@ -29,8 +29,9 @@ export function useCanvasSelection({
   const selStartRef = useRef<{ x: number; y: number } | null>(null);
   const isCustomSelRef = useRef(false);
 
-  const handleSelectionChange = useCallback((sel: { nodes: Node[] }) => {
-    currentSelectedIdsRef.current = new Set(sel.nodes.filter((n) => n.selected).map((n) => n.id));
+  const handleSelectionChange = useCallback((sel: { nodes?: Node[] } | null | undefined) => {
+    const nextNodes = Array.isArray(sel?.nodes) ? sel.nodes : [];
+    currentSelectedIdsRef.current = new Set(nextNodes.filter((n) => n.selected).map((n) => n.id));
     if (isBoxSelectingRef.current || isNodeDraggingRef.current) return;
     prevSelectedNodeIdsRef.current = new Set(currentSelectedIdsRef.current);
   }, []);

@@ -1,7 +1,7 @@
 import React from 'react';
-import { FileText, Table2, Clock3, Link2 } from 'lucide-react';
+import { Clock3, FileText, ImageIcon, Link2, Table2 } from 'lucide-react';
 import type { NodeTableRow, NodeToolType, TaskData } from '../types';
-import { formatScheduleSummary, getNodeToolLinks } from '../utils/nodeTools';
+import { formatScheduleSummary, getNodeToolImages, getNodeToolLinks } from '../utils/nodeTools';
 
 export interface ToolConfig {
   id: NodeToolType;
@@ -61,6 +61,17 @@ export const TOOL_CONFIGS: ToolConfig[] = [
     accentClass: 'bg-emerald-500',
     quickMode: 'preview-edit',
     order: 30,
+  },
+  {
+    id: 'image',
+    labelZh: '图片',
+    labelEn: 'Images',
+    descriptionZh: '收集参考图、草图和截图素材',
+    descriptionEn: 'Collect references, mockups, and image assets',
+    icon: <ImageIcon className="w-4 h-4" />,
+    accentClass: 'bg-rose-500',
+    quickMode: 'preview-edit',
+    order: 35,
   },
   {
     id: 'table',
@@ -250,6 +261,37 @@ export function getToolSnapshot(
             summary: language === 'zh' ? '节点还没有时间安排' : 'This node has no schedule yet',
             detail: getToolDescription(toolId, language),
             actionLabel: language === 'zh' ? '添加时间' : 'Add schedule',
+            railBadge: { kind: 'disabled' },
+          };
+    }
+    case 'image': {
+      const enabled = Boolean(nodeData.tools?.image?.enabled);
+      const images = getNodeToolImages(nodeData.tools?.image);
+
+      return enabled
+        ? {
+            enabled: true,
+            badge: language === 'zh' ? `${images.length} 张` : `${images.length} images`,
+            stateLabel: images.length > 0 ? (language === 'zh' ? '已有内容' : 'With content') : (language === 'zh' ? '等待填充' : 'Ready to fill'),
+            summary: language === 'zh' ? '图片素材已经挂载' : 'Image references are attached',
+            detail:
+              images.length > 0
+                ? language === 'zh'
+                  ? '参考图和截图已经归位，切换节点时也能持续查看。'
+                  : 'References and captures stay attached as you move through nodes.'
+                : language === 'zh'
+                  ? '图片插件已开启，等待添加第一张素材。'
+                  : 'The image tool is ready for the first visual reference.',
+            actionLabel: language === 'zh' ? '管理图片' : 'Manage images',
+            railBadge: images.length > 0 ? { kind: 'count', value: formatCompactCount(images.length) } : { kind: 'empty' },
+          }
+        : {
+            enabled: false,
+            badge: language === 'zh' ? '未启用' : 'Inactive',
+            stateLabel: language === 'zh' ? '未启用' : 'Inactive',
+            summary: language === 'zh' ? '还没有挂载图片素材' : 'No image references yet',
+            detail: getToolDescription(toolId, language),
+            actionLabel: language === 'zh' ? '添加图片' : 'Add images',
             railBadge: { kind: 'disabled' },
           };
     }

@@ -30,7 +30,8 @@ type StartDialogProps = {
   targetRecordRect?: ViewportRect | null;
   onGenerate: () => void;
   onAbort: () => void;
-  onClose: () => void;
+  onManualStart: () => void;
+  onDismiss: () => void;
 };
 
 export default function StartDialog({
@@ -51,7 +52,8 @@ export default function StartDialog({
   targetRecordRect,
   onGenerate,
   onAbort,
-  onClose,
+  onManualStart,
+  onDismiss,
 }: StartDialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -144,7 +146,7 @@ export default function StartDialog({
             transition={{ duration: 0.15, ease: 'easeOut' }}
             className="absolute inset-0 bg-white/40 backdrop-blur-xl"
             onClick={() => {
-              if (!isGenerateTransitioning) onClose();
+              if (!isGenerateTransitioning) onDismiss();
             }}
           />
 
@@ -233,7 +235,7 @@ export default function StartDialog({
                 <div className="flex items-center justify-center gap-8 pt-4">
                   <button
                     onClick={() => {
-                      if (!isGenerateTransitioning) onClose();
+                      if (!isGenerateTransitioning) onManualStart();
                     }}
                     className="text-sm font-bold text-neutral-400 hover:text-primary transition-all flex items-center gap-2 px-6 py-3 rounded-2xl hover:bg-primary/5"
                   >

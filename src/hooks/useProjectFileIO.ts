@@ -4,6 +4,7 @@ import type { Edge, Node } from '@xyflow/react';
 
 import { createHistory, type HistoryState } from '../utils/historyUtils';
 import type { TaskData, TaskMode } from '../types';
+import { clearTransientNodeData, sanitizeNodeForPersistence } from '../utils/nodePersistence';
 
 type HydrateNodeData = {
   language: 'zh' | 'en';
@@ -30,12 +31,8 @@ type UseProjectFileIOParams = {
   setImportStatus: (status: 'idle' | 'loading' | 'success' | 'error') => void;
   setImportMessage: (message: string) => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onImportSuccess?: () => void;
 };
-
-function stripNodeHandlers(node: Node): Node {
-  const { onStatusChange, onUpdateData, onOpenToolPanel, onAddNode, onUngroup, ...cleanData } = (node.data || {}) as Record<string, unknown>;
-  return { ...node, data: cleanData };
-}
 
 function sanitizeEdges(nodes: Node[], edges: Edge[]) {
   const nodeIds = nodes.map((node) => node.id);
@@ -58,6 +55,7 @@ export function useProjectFileIO({
   setImportStatus,
   setImportMessage,
   fileInputRef,
+  onImportSuccess,
 }: UseProjectFileIOParams) {
   const saveFile = useCallback((fileName?: string) => {
     const rawName = (fileName || projectName).trim();
@@ -69,7 +67,7 @@ export function useProjectFileIO({
       projectName: cleanName,
       language,
       mode,
-      nodes: nodes.map(stripNodeHandlers),
+      nodes: nodes.map(sanitizeNodeForPersistence),
       edges,
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -81,53 +79,43 @@ export function useProjectFileIO({
     URL.revokeObjectURL(url);
   }, [projectName, language, mode, nodes, edges]);
 
-  const loadFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const importProjectContent = useCallback((content: string) => {
+    try {
+      const data = JSON.parse(content);
+      if (!data.nodes || !data.edges) throw new Error('Invalid JSON');
 
-    setImportStatus('loading');
-    setImportMessage(language === 'zh' ? '正在导入...' : 'Importing...');
+      const hydratedNodes = data.nodes.map((node: Node) => ({
+        ...node,
+        selected: false,
+        extent: node.parentId ? undefined : node.extent,
+        data: {
+          ...clearTransientNodeData((node.data || {}) as Record<string, unknown>),
+          language: data.language || language,
+          onStatusChange: hydrateNodeData.onStatusChange,
+          onUpdateData: hydrateNodeData.onUpdateData,
+          onOpenToolPanel: hydrateNodeData.onOpenToolPanel,
+          onAddNode: (e: any, id: string, position: any) => hydrateNodeData.onAddNode(e, id, position),
+          ...(node.type === 'group' ? { onUngroup: hydrateNodeData.onUngroup } : null),
+        },
+      }));
 
-    const reader = new FileReader();
-    reader.onload = (readerEvent) => {
-      try {
-        const content = readerEvent.target?.result as string;
-        const data = JSON.parse(content);
-        if (!data.nodes || !data.edges) throw new Error('Invalid JSON');
+      const finalEdges = sanitizeEdges(hydratedNodes, data.edges);
 
-        const hydratedNodes = data.nodes.map((node: Node) => ({
-          ...node,
-          data: {
-            ...node.data,
-            language: data.language || language,
-            onStatusChange: hydrateNodeData.onStatusChange,
-            onUpdateData: hydrateNodeData.onUpdateData,
-            onOpenToolPanel: hydrateNodeData.onOpenToolPanel,
-            onAddNode: (e: any, id: string, position: any) => hydrateNodeData.onAddNode(e, id, position),
-            ...(node.type === 'group' ? { onUngroup: hydrateNodeData.onUngroup } : null),
-          },
-        }));
-
-        const finalEdges = sanitizeEdges(hydratedNodes, data.edges);
-
-        if (data.projectName) setProjectName(data.projectName);
-        setNodes(hydratedNodes);
-        setEdges(finalEdges);
-        setLanguage(data.language || 'zh');
-        setMode(data.mode || 'professional');
-        setHistory(createHistory({ nodes: hydratedNodes, edges: finalEdges }));
-        setImportStatus('success');
-        setImportMessage(language === 'zh' ? '导入成功' : 'Success');
-      } catch (error: any) {
-        setImportStatus('error');
-        setImportMessage(`${language === 'zh' ? '错误: ' : 'Error: '}${error.message}`);
-      } finally {
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        setTimeout(() => setImportStatus('idle'), 4000);
-      }
-    };
-
-    reader.readAsText(file);
+      if (data.projectName) setProjectName(data.projectName);
+      setNodes(hydratedNodes);
+      setEdges(finalEdges);
+      setLanguage(data.language || 'zh');
+      setMode(data.mode || 'professional');
+      setHistory(createHistory({ nodes: hydratedNodes, edges: finalEdges }));
+      setImportStatus('success');
+      setImportMessage(language === 'zh' ? '导入成功' : 'Success');
+      onImportSuccess?.();
+    } catch (error: any) {
+      setImportStatus('error');
+      setImportMessage(`${language === 'zh' ? '错误: ' : 'Error: '}${error.message}`);
+    } finally {
+      setTimeout(() => setImportStatus('idle'), 4000);
+    }
   }, [
     language,
     hydrateNodeData,
@@ -139,11 +127,45 @@ export function useProjectFileIO({
     setHistory,
     setImportStatus,
     setImportMessage,
+    onImportSuccess,
+  ]);
+
+  const loadProjectFile = useCallback((file: File) => {
+    if (!file) return;
+
+    setImportStatus('loading');
+    setImportMessage(language === 'zh' ? '正在导入...' : 'Importing...');
+
+    const reader = new FileReader();
+    reader.onload = (readerEvent) => importProjectContent((readerEvent.target?.result as string) || '');
+    reader.onerror = () => {
+      setImportStatus('error');
+      setImportMessage(language === 'zh' ? '读取文件失败' : 'Failed to read file');
+      setTimeout(() => setImportStatus('idle'), 4000);
+    };
+
+    reader.readAsText(file);
+  }, [
+    importProjectContent,
+    language,
+    setImportStatus,
+    setImportMessage,
+  ]);
+
+  const loadFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    loadProjectFile(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [
+    loadProjectFile,
     fileInputRef,
   ]);
 
   return {
     saveFile,
     loadFile,
+    loadProjectFile,
   };
 }

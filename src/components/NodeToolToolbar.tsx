@@ -2,7 +2,9 @@ import React from 'react';
 import { NodeToolbar, Position } from '@xyflow/react';
 import {
   ArrowUpRight,
+  ExternalLink,
   Plus,
+  Upload,
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -22,10 +24,14 @@ import type { NodeToolType, ScheduleTimeType, TaskData } from '../types';
 import {
   SCHEDULE_TIME_TYPE_OPTIONS,
   createEmptyLinkItem,
+  createImageItem,
+  deriveNodeImageTitle,
   deriveNodeLinkTitle,
   ensureToolState,
   fetchNodeLinkTitle,
+  getNodeToolImages,
   getScheduleTimeTypeDefaultLabel,
+  normalizeNodeImageSource,
   normalizeNodeLinkUrl,
 } from '../utils/nodeTools';
 
@@ -35,6 +41,7 @@ type NodeToolToolbarProps = {
   selected: boolean;
   visible?: boolean;
   onClose?: () => void;
+  quickToolRequest?: { tool: NodeToolType; nonce: number } | null;
 };
 
 function getCurrentScheduleSeed() {
@@ -93,6 +100,16 @@ function getAccentTone(toolId: NodeToolType) {
         ring: 'ring-amber-200/80',
         glow: 'shadow-[0_18px_40px_-24px_rgba(245,158,11,0.6)]',
       };
+    case 'image':
+      return {
+        soft: 'bg-rose-50',
+        tint: 'bg-rose-500/12',
+        text: 'text-rose-600',
+        border: 'border-rose-200',
+        button: 'bg-rose-500 text-white hover:bg-rose-600',
+        ring: 'ring-rose-200/80',
+        glow: 'shadow-[0_18px_40px_-24px_rgba(244,63,94,0.55)]',
+      };
     default:
       return {
         soft: 'bg-primary/10',
@@ -112,6 +129,7 @@ export default function NodeToolToolbar({
   selected,
   visible = true,
   onClose,
+  quickToolRequest,
 }: NodeToolToolbarProps) {
   const context = React.useContext(NodeSettingsContext);
   const isDarkTheme = context.themeMode === 'dark';
@@ -123,10 +141,12 @@ export default function NodeToolToolbar({
   const [activeTool, setActiveTool] = React.useState<NodeToolType | null>(null);
   const [openingTool, setOpeningTool] = React.useState<NodeToolType | null>(null);
   const [documentDraft, setDocumentDraft] = React.useState('');
+  const [imageUrlDraft, setImageUrlDraft] = React.useState('');
   const openingTimerRef = React.useRef<number | null>(null);
   const linkInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
   const pendingLinkFocusIdRef = React.useRef<string | null>(null);
   const linkRequestControllersRef = React.useRef<Record<string, AbortController>>({});
+  const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const dataRef = React.useRef(data);
 
   const hasToolButtons = availableTools.length > 0;
@@ -136,15 +156,24 @@ export default function NodeToolToolbar({
   }, [data]);
 
   React.useEffect(() => {
-    if (!selected || !visible) {
+    if (!selected) {
       if (openingTimerRef.current) {
         window.clearTimeout(openingTimerRef.current);
         openingTimerRef.current = null;
       }
       setOpeningTool(null);
       setActiveTool(null);
+      return;
     }
-  }, [selected, visible]);
+
+    if (!visible && !activeTool) {
+      if (openingTimerRef.current) {
+        window.clearTimeout(openingTimerRef.current);
+        openingTimerRef.current = null;
+      }
+      setOpeningTool(null);
+    }
+  }, [selected, visible, activeTool]);
 
   React.useEffect(() => {
     return () => {
@@ -176,7 +205,7 @@ export default function NodeToolToolbar({
   }, [data.tools?.link?.items]);
 
   React.useEffect(() => {
-    if (!visible) return;
+    if (!visible && !activeTool) return;
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -193,7 +222,12 @@ export default function NodeToolToolbar({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [activeTool, onClose, visible]);
 
-  if (!selected || !visible || !hasToolButtons) {
+  React.useEffect(() => {
+    if (!quickToolRequest || !selected) return;
+    openQuickTool(quickToolRequest.tool);
+  }, [quickToolRequest?.nonce, quickToolRequest, selected]);
+
+  if (!selected || !hasToolButtons) {
     return null;
   }
 
@@ -340,6 +374,62 @@ export default function NodeToolToolbar({
         items: nextItems,
       },
     });
+  };
+
+  const updateImageItems = (nextItems: Array<{ id: string; title: string; src: string; alt: string }>, enabled = nextItems.length > 0) => {
+    const currentData = dataRef.current;
+    const tools = ensureToolState(currentData, 'image', language);
+    updateTools('image', {
+      ...tools,
+      image: {
+        enabled,
+        items: nextItems,
+      },
+    });
+  };
+
+  const addImageFromUrl = () => {
+    const normalizedSource = normalizeNodeImageSource(imageUrlDraft);
+    if (!normalizedSource) return;
+
+    const fallbackTitle = language === 'zh' ? '网络图片' : 'Web image';
+    const title = deriveNodeImageTitle(normalizedSource, fallbackTitle);
+    const currentData = dataRef.current;
+    const imageItems = getNodeToolImages(currentData.tools?.image);
+    updateImageItems([
+      ...imageItems,
+      createImageItem(normalizedSource, title, title),
+    ], true);
+    setImageUrlDraft('');
+  };
+
+  const deleteImageItem = (itemId: string) => {
+    const currentData = dataRef.current;
+    const imageItems = getNodeToolImages(currentData.tools?.image);
+    const nextItems = imageItems.filter((item) => item.id !== itemId);
+    updateImageItems(nextItems, nextItems.length > 0);
+  };
+
+  const handleImageFileChange = async (fileList: FileList | null) => {
+    const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
+    if (files.length === 0) return;
+
+    const nextItems = await Promise.all(files.map((file) => (
+      new Promise<ReturnType<typeof createImageItem>>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const source = typeof reader.result === 'string' ? reader.result : '';
+          const title = file.name.replace(/\.[^.]+$/, '') || (language === 'zh' ? '本地图片' : 'Local image');
+          resolve(createImageItem(source, title, title));
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      })
+    )));
+
+    const currentData = dataRef.current;
+    const imageItems = getNodeToolImages(currentData.tools?.image);
+    updateImageItems([...imageItems, ...nextItems], true);
   };
 
   const addScheduleItemQuick = () => {
@@ -636,6 +726,26 @@ export default function NodeToolToolbar({
       );
     }
 
+    if (toolId === 'image') {
+      const imageCount = getNodeToolImages(data.tools?.image).length;
+
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="text-sm font-black text-neutral-900">
+            {language === 'zh' ? `${imageCount} 张图片` : `${imageCount} images`}
+          </div>
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            className="flex h-9 w-9 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 transition-all hover:bg-rose-100"
+            title={language === 'zh' ? '上传图片' : 'Upload image'}
+          >
+            <Upload className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -804,6 +914,85 @@ export default function NodeToolToolbar({
     );
   };
 
+  const renderImageQuickView = () => {
+    const images = getNodeToolImages(data.tools?.image);
+
+    return (
+      <div className="space-y-3">
+        <div className="relative">
+          <input
+            type="text"
+            value={imageUrlDraft}
+            onChange={(event) => setImageUrlDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              event.preventDefault();
+              addImageFromUrl();
+            }}
+            placeholder="https://"
+            className="min-w-0 w-full rounded-[14px] border border-neutral-200 bg-white px-3 py-2 pr-[4.9rem] text-[12px] text-neutral-700 outline-none transition-all focus:border-rose-200 focus:bg-white"
+          />
+          <button
+            type="button"
+            onClick={addImageFromUrl}
+            disabled={!normalizeNodeImageSource(imageUrlDraft)}
+            className={`absolute right-1 top-1/2 flex h-8 -translate-y-1/2 items-center justify-center rounded-[10px] px-2.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all ${
+              normalizeNodeImageSource(imageUrlDraft)
+                ? 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                : 'bg-neutral-100 text-neutral-400 hover:bg-neutral-200'
+            } disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            {language === 'zh' ? '添加' : 'Add'}
+          </button>
+        </div>
+
+        {images.length > 0 ? (
+          <div className="grid grid-cols-3 gap-2">
+            {images.map((item, index) => (
+              <div key={item.id} className="overflow-hidden rounded-[16px] border border-neutral-200 bg-white">
+                <div className="relative aspect-square overflow-hidden bg-neutral-50">
+                  <img
+                    src={item.src}
+                    alt={item.alt || item.title}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="absolute right-2 top-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => window.open(item.src, '_blank', 'noopener,noreferrer')}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/92 text-neutral-500 shadow-sm transition-all hover:text-rose-600"
+                      title={language === 'zh' ? '打开图片' : 'Open image'}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteImageItem(item.id)}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/92 text-neutral-400 shadow-sm transition-all hover:text-red-500"
+                      title={language === 'zh' ? '删除图片' : 'Delete image'}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+                <div className="px-2.5 py-2">
+                  <div className="truncate text-[11px] font-black text-neutral-800">
+                    {item.title || (language === 'zh' ? `图片 ${index + 1}` : `Image ${index + 1}`)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-[18px] bg-neutral-50 px-3 py-3 text-[12px] text-neutral-500 ring-1 ring-black/5">
+            {language === 'zh' ? '上传一张本地图片，或直接粘贴线上图片链接。' : 'Upload a local image or paste a remote image URL.'}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderQuickActions = (toolId: NodeToolType) => {
     const tone = getAccentTone(toolId);
     return (
@@ -844,6 +1033,8 @@ export default function NodeToolToolbar({
         return renderLinkQuickView();
       case 'schedule':
         return renderScheduleQuickView();
+      case 'image':
+        return renderImageQuickView();
       default:
         return null;
     }
@@ -887,29 +1078,42 @@ export default function NodeToolToolbar({
 
   return (
     <>
-      <NodeToolbar isVisible position={Position.Bottom} align="center" offset={18}>
-        <motion.div
-          initial={{ opacity: 0, y: -6, scale: 0.96 }}
-          animate={{
-            opacity: 1,
-            y: 0,
-            scale: 1,
-          }}
-          transition={{
-            opacity: { duration: 0.16 },
-            y: { duration: 0.16 },
-            scale: { duration: 0.16 },
-          }}
-          className="overflow-visible"
-        >
-          {renderOverview()}
-        </motion.div>
-      </NodeToolbar>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={async (event) => {
+          await handleImageFileChange(event.target.files);
+          event.target.value = '';
+        }}
+      />
+      {visible && (
+        <NodeToolbar isVisible position={Position.Bottom} align="center" offset={18}>
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.96 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              scale: 1,
+            }}
+            transition={{
+              opacity: { duration: 0.16 },
+              y: { duration: 0.16 },
+              scale: { duration: 0.16 },
+            }}
+            className="overflow-visible"
+          >
+            {renderOverview()}
+          </motion.div>
+        </NodeToolbar>
+      )}
 
       {portalTarget &&
         createPortal(
           <AnimatePresence>
-            {visible && activeTool && (
+            {activeTool && (
               <motion.div
                 key={`tool-layer-${activeTool}`}
                 initial={{ opacity: 0 }}

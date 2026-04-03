@@ -17,6 +17,7 @@ import {
 import SidebarCalendarView from './SidebarCalendarView';
 import CustomScrollArea from './CustomScrollArea';
 import { DocumentToolEmpty, DocumentToolContent } from './DocumentTool';
+import { ImageToolContent, ImageToolEmpty } from './ImageTool';
 import { LinkToolEmpty, LinkToolContent } from './LinkTool';
 import {
   getAvailableNodeTools,
@@ -69,6 +70,7 @@ const TOOL_REGISTRY: Record<
   document: { Empty: DocumentToolEmpty, Content: DocumentToolContent },
   link: { Empty: LinkToolEmpty, Content: LinkToolContent },
   schedule: { Empty: ScheduleToolEmpty, Content: ScheduleToolContent },
+  image: { Empty: ImageToolEmpty, Content: ImageToolContent },
 };
 
 const STATUS_LABELS = {
@@ -160,6 +162,16 @@ function getAccentTone(accentClass?: string) {
         ring: 'ring-amber-200/80',
         border: 'border-amber-200',
         glow: 'shadow-[0_18px_40px_-24px_rgba(245,158,11,0.6)]',
+      };
+    case 'bg-rose-500':
+      return {
+        solid: 'bg-rose-500',
+        soft: 'bg-rose-50',
+        tint: 'bg-rose-500/12',
+        text: 'text-rose-600',
+        ring: 'ring-rose-200/80',
+        border: 'border-rose-200',
+        glow: 'shadow-[0_18px_40px_-24px_rgba(244,63,94,0.55)]',
       };
     default:
       return {

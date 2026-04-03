@@ -4,11 +4,13 @@ import type React from 'react';
 import type { Edge, Node } from '@xyflow/react';
 
 import { getLayoutedElements } from '../lib/flowLayout';
+import type { TaskMode } from '../types';
 
 type UseCanvasLayoutActionsParams = {
   nodes: Node[];
   edges: Edge[];
   language: 'zh' | 'en';
+  mode: TaskMode;
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
   takeSnapshot: (nodes?: Node[], edges?: Edge[]) => void;
   showStatus: (text: string, icon: React.ReactNode) => void;
@@ -18,6 +20,7 @@ export function useCanvasLayoutActions({
   nodes,
   edges,
   language,
+  mode,
   setNodes,
   takeSnapshot,
   showStatus,
@@ -105,7 +108,7 @@ export function useCanvasLayoutActions({
 
     const selectedNodeIds = selectedNodes.map((node) => node.id);
     const selectedEdges = edges.filter((edge) => selectedNodeIds.includes(edge.source) && selectedNodeIds.includes(edge.target));
-    const layouted = getLayoutedElements(selectedNodes, selectedEdges, 'LR');
+    const layouted = getLayoutedElements(selectedNodes, selectedEdges, 'LR', mode);
 
     const nextNodes = nodes.map((node) => {
       const layoutedNode = (layouted.nodes as Node[]).find((candidate) => candidate.id === node.id);
@@ -115,7 +118,7 @@ export function useCanvasLayoutActions({
     setNodes(nextNodes);
     takeSnapshot(nextNodes, edges);
     showStatus(language === 'zh' ? '局部布局完成' : 'Selection layouted', createElement(Sparkles, { className: 'w-3.5 h-3.5' }));
-  }, [nodes, edges, language, setNodes, takeSnapshot, showStatus]);
+  }, [nodes, edges, language, mode, setNodes, takeSnapshot, showStatus]);
 
   return {
     alignNodes,

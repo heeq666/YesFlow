@@ -2,6 +2,23 @@
 
 All notable changes to **YesFlow** are documented here.
 
+## [0.3.1] - 2026-04-03
+
+### Added
+
+- Node image tool with local uploads and remote image link support
+- Project-level AI task tracking so generation progress and outcomes stay attached to each record
+
+### Changed
+
+- Unified task node sizing and spacing through shared layout constants for canvas, grouping, and AI-generated placement
+- Refreshed README, metadata, settings copy, and in-app release notes for the `0.3.1` release
+
+### Fixed
+
+- Project saves and exports now strip transient UI and AI runtime fields before persistence
+- Added an application error boundary to reduce full-screen blank states after runtime failures
+
 ## [0.3.0] - 2026-04-03
 
 ### Added

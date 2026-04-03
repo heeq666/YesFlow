@@ -69,8 +69,8 @@ export default function ContextualToolbar({
   if (selectedNodes.length === 0) return null;
 
   const hasSelectedNodesInGroup = selectedNodes.some((node) => node.type !== 'group' && Boolean(node.parentId));
-  const primaryActionClass = 'flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/95 hover:to-indigo-500 transition-all shadow-[0_12px_28px_-16px_rgba(37,99,235,0.9)]';
-  const secondaryActionClass = 'flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:border-neutral-300 dark:hover:bg-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-all shadow-sm';
+  const primaryActionClass = 'h-10 inline-flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold leading-none text-white bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/95 hover:to-indigo-500 transition-all shadow-[0_12px_28px_-16px_rgba(37,99,235,0.9)]';
+  const secondaryActionClass = 'h-10 inline-flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold leading-none bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:border-neutral-300 dark:hover:bg-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-all shadow-sm';
   const ghostIconClass = 'p-2 rounded-xl text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors';
 
   return (
@@ -211,43 +211,60 @@ export default function ContextualToolbar({
               </div>
 
               <div className="flex items-center gap-2 pr-6 border-r border-neutral-200 dark:border-neutral-700">
-                <div className="flex flex-col items-end gap-1">
-                  <textarea
+                <div className="relative">
+                  <input
+                    type="text"
                     value={selectedPrompt}
                     onChange={(e) => onSelectedPromptChange(e.target.value)}
                     placeholder={language === 'zh' ? '批量修改...' : 'Batch modify...'}
-                    className="w-48 h-10 px-3 py-2.5 text-xs bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-xl outline-none resize-none font-medium leading-tight placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
+                    className="w-56 h-10 pl-3 pr-20 text-xs bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-xl outline-none font-medium leading-none placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
                   />
-                  <div className="flex items-center gap-2">
+                  <div className="pointer-events-none absolute inset-y-0 right-3 flex flex-col items-end justify-center leading-none">
                     <span className={`text-[9px] font-mono ${getCharCountColor(selectedPrompt.length).textClass}`}>
-                      {selectedPrompt.length}/4000 · ~{estimateTokens(selectedPrompt)} tokens
+                      {selectedPrompt.length}/4000
                     </span>
-                    {selectedPrompt.length > 4000 && (
-                      <span className="flex items-center gap-0.5 text-[9px] text-red-500 dark:text-red-400">
+                    {selectedPrompt.length > 4000 ? (
+                      <span className="mt-1 flex items-center gap-0.5 text-[9px] text-red-500 dark:text-red-400">
                         <AlertTriangle className="w-2.5 h-2.5" />
                         {language === 'zh' ? '超限' : 'Over'}
+                      </span>
+                    ) : (
+                      <span className="mt-1 text-[9px] font-mono text-neutral-400 dark:text-neutral-500">
+                        ~{estimateTokens(selectedPrompt)} tokens
                       </span>
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={onModifySelected}
-                  disabled={isLoading}
-                  title={language === 'zh' ? '批量修改选中节点' : 'Modify selected nodes'}
-                  className="p-2.5 rounded-xl text-white bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/95 hover:to-indigo-500 transition-all flex items-center justify-center shadow-[0_12px_28px_-18px_rgba(37,99,235,0.95)]"
-                >
-                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                </button>
+                {isLoading ? (
+                  <button
+                    onClick={onAbort}
+                    title={language === 'zh' ? '停止批量修改' : 'Stop batch update'}
+                    className="h-10 shrink-0 rounded-xl px-3 text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 transition-all flex items-center justify-center gap-1.5 shadow-[0_12px_28px_-18px_rgba(239,68,68,0.45)]"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span className="text-[11px] font-bold">{language === 'zh' ? '停止' : 'Stop'}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={onModifySelected}
+                    title={language === 'zh' ? '批量修改选中节点' : 'Modify selected nodes'}
+                    className="h-10 shrink-0 rounded-xl px-3 text-white bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/95 hover:to-indigo-500 transition-all flex items-center justify-center gap-1.5 shadow-[0_12px_28px_-18px_rgba(37,99,235,0.95)]"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    <span className="text-[11px] font-bold">{language === 'zh' ? '执行' : 'Run'}</span>
+                  </button>
+                )}
               </div>
 
               <button
                 onClick={onDeleteSelectedMany}
                 title={language === 'zh' ? '删除选中节点' : 'Delete selected nodes'}
                 aria-label={language === 'zh' ? '删除选中节点' : 'Delete selected nodes'}
-                className={ghostIconClass}
+                className="h-10 w-10 shrink-0 rounded-xl text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors flex items-center justify-center"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+
             </div>
           )}
         </div>

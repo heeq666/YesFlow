@@ -1,8 +1,15 @@
 import type React from 'react';
-import { Activity, CornerDownRight, Database, FileUp, GitMerge, Grid2x2, Globe, Minus, Moon, Plus, Pin, Redo2, Save, Sun, Undo2 } from 'lucide-react';
+import { useMemo } from 'react';
+import { Activity, CornerDownRight, Database, FileUp, GitMerge, Grid2x2, Minus, Plus, Pin, Redo2, Save, Undo2 } from 'lucide-react';
 import { Panel } from '@xyflow/react';
 
-import type { ConnectionMode, NodePreset, ThemeMode } from '../types';
+import type { ConnectionMode, NodePreset, TaskMode, ThemeMode } from '../types';
+
+const PATH_BUTTONS = [
+  { id: 'bezier', icon: <Activity className="w-3.5 h-3.5" /> },
+  { id: 'straight', icon: <Minus className="w-3.5 h-3.5" /> },
+  { id: 'step', icon: <CornerDownRight className="w-3.5 h-3.5" /> },
+];
 
 type TopToolbarProps = {
   currentProjectLabel: string;
@@ -15,6 +22,8 @@ type TopToolbarProps = {
   onSaveToLocal: () => void;
   onSaveFile: () => void;
   onOpenFile: () => void;
+  mode: TaskMode;
+  onModeChange: (mode: TaskMode) => void;
   defaultPathType: string;
   onApplyPathTypeToAll: (pathType: string) => void;
   connectionMode: ConnectionMode;
@@ -41,6 +50,8 @@ export default function TopToolbar({
   onSaveToLocal,
   onSaveFile,
   onOpenFile,
+  mode,
+  onModeChange,
   defaultPathType,
   onApplyPathTypeToAll,
   connectionMode,
@@ -55,23 +66,30 @@ export default function TopToolbar({
   onToggleTheme,
   onToggleLanguage,
 }: TopToolbarProps) {
-  const pathButtons = [
-    { id: 'bezier', icon: <Activity className="w-3.5 h-3.5" /> },
-    { id: 'straight', icon: <Minus className="w-3.5 h-3.5" /> },
-    { id: 'step', icon: <CornerDownRight className="w-3.5 h-3.5" /> },
-  ];
-  const connectionButtons: { id: ConnectionMode; icon: React.ReactNode; title: string }[] = [
+  const connectionButtons = useMemo(() => [
     {
-      id: 'auto',
+      id: 'auto' as ConnectionMode,
       icon: <GitMerge className="w-3.5 h-3.5" />,
       title: language === 'zh' ? '自动换边' : 'Auto switch sides',
     },
     {
-      id: 'fixed',
+      id: 'fixed' as ConnectionMode,
       icon: <Pin className="w-3.5 h-3.5" />,
       title: language === 'zh' ? '固定端口' : 'Fixed handles',
     },
-  ];
+  ], [language]);
+  const modeButtons = useMemo(() => [
+    {
+      id: 'daily' as TaskMode,
+      label: language === 'zh' ? '日常' : 'Daily',
+      hint: language === 'zh' ? '小气泡视图，仅保留标题和状态' : 'Bubble view with title and status only',
+    },
+    {
+      id: 'professional' as TaskMode,
+      label: language === 'zh' ? '专业' : 'Pro',
+      hint: language === 'zh' ? '展开完整节点信息与插件工作流' : 'Full node details and plugin workflow',
+    },
+  ], [language]);
 
   const getPresetToneClass = (color: NodePreset['color']) => {
     if (themeMode === 'dark') {
@@ -117,6 +135,23 @@ export default function TopToolbar({
         </div>
         <div className="h-8 w-px bg-neutral-200 hidden lg:block" />
         <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl">
+          {modeButtons.map((button) => (
+            <button
+              key={button.id}
+              onClick={() => onModeChange(button.id)}
+              title={button.hint}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-[0.14em] uppercase transition-all ${
+                mode === button.id
+                  ? 'bg-white text-primary shadow-sm ring-1 ring-primary/10'
+                  : 'text-neutral-500 hover:text-neutral-700'
+              }`}
+            >
+              {button.label}
+            </button>
+          ))}
+        </div>
+        <div className="h-8 w-px bg-neutral-200" />
+        <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl">
           <button onClick={onUndo} disabled={!canUndo} title={language === 'zh' ? '撤销' : 'Undo'} className="p-1.5 rounded-lg text-neutral-500 hover:bg-white hover:text-primary disabled:opacity-30 transition-all"><Undo2 className="w-4 h-4" /></button>
           <button onClick={onRedo} disabled={!canRedo} title={language === 'zh' ? '重做' : 'Redo'} className="p-1.5 rounded-lg text-neutral-500 hover:bg-white hover:text-primary disabled:opacity-30 transition-all"><Redo2 className="w-4 h-4" /></button>
           <div className="w-px h-4 bg-neutral-200 mx-1" />
@@ -126,7 +161,7 @@ export default function TopToolbar({
         </div>
         <div className="h-8 w-px bg-neutral-200" />
         <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl">
-          {pathButtons.map((button) => (
+          {PATH_BUTTONS.map((button) => (
             <button
               key={button.id}
               onClick={() => onApplyPathTypeToAll(button.id)}

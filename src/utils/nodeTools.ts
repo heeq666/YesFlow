@@ -2,6 +2,8 @@ import type { Node, Edge } from '@xyflow/react';
 
 import type {
   NodeDocumentData,
+  NodeImageData,
+  NodeImageItem,
   NodeLinkData,
   NodeLinkItem,
   NodeSchedule,
@@ -89,6 +91,22 @@ export function createDefaultLinkData(): NodeLinkData {
   return {
     enabled: true,
     items: [createEmptyLinkItem()],
+  };
+}
+
+export function createImageItem(src: string, title: string, alt?: string): NodeImageItem {
+  return {
+    id: `image-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    title,
+    src,
+    alt: alt || title,
+  };
+}
+
+export function createDefaultImageData(): NodeImageData {
+  return {
+    enabled: true,
+    items: [],
   };
 }
 
@@ -183,6 +201,24 @@ function normalizeLinkData(linkTool: NodeLinkData | undefined): NodeLinkData | u
   };
 }
 
+function normalizeImageData(imageTool: NodeImageData | undefined): NodeImageData | undefined {
+  if (!imageTool) return undefined;
+
+  const items = Array.isArray(imageTool.items)
+    ? imageTool.items.map((item, index) => ({
+      id: typeof item?.id === 'string' && item.id.trim().length > 0 ? item.id : `image-item-${index}`,
+      title: typeof item?.title === 'string' ? item.title : '',
+      src: typeof item?.src === 'string' ? item.src : '',
+      alt: typeof item?.alt === 'string' ? item.alt : '',
+    }))
+    : [];
+
+  return {
+    enabled: Boolean(imageTool.enabled),
+    items,
+  };
+}
+
 function normalizeScheduleData(scheduleTool: NodeSchedule | undefined): NodeSchedule | undefined {
   if (!scheduleTool) return undefined;
 
@@ -205,6 +241,24 @@ function normalizeScheduleData(scheduleTool: NodeSchedule | undefined): NodeSche
 export function normalizeNodeLinkUrl(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(withProtocol);
+    return /^https?:$/i.test(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeNodeImageSource(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^data:image\//i.test(trimmed)) {
+    return trimmed;
+  }
 
   const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 
@@ -256,6 +310,24 @@ export function deriveNodeLinkTitle(value: string) {
   }
 }
 
+export function deriveNodeImageTitle(value: string, fallback: string) {
+  const normalizedSource = normalizeNodeImageSource(value);
+  if (!normalizedSource) return fallback;
+
+  if (/^data:image\//i.test(normalizedSource)) {
+    return fallback;
+  }
+
+  try {
+    const url = new URL(normalizedSource);
+    const segments = url.pathname.split('/').filter(Boolean);
+    const lastSegment = formatUrlSegmentLabel(segments[segments.length - 1] || '');
+    return lastSegment || cleanupNodeLinkTitle(url.hostname.replace(/^www\./i, '')) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function fetchNodeLinkTitle(value: string, signal?: AbortSignal) {
   const normalizedUrl = normalizeNodeLinkUrl(value);
   if (!normalizedUrl) return null;
@@ -299,6 +371,28 @@ export function getNodeToolLinks(linkTool: NodeLinkData | undefined) {
   return Array.from(uniqueLinks.values());
 }
 
+export function getNodeToolImages(imageTool: NodeImageData | undefined) {
+  const normalizedImageTool = normalizeImageData(imageTool);
+  if (!normalizedImageTool?.enabled) return [];
+
+  return normalizedImageTool.items
+    .map((item, index) => {
+      const normalizedSrc = normalizeNodeImageSource(item.src);
+      if (!normalizedSrc) return null;
+
+      const fallbackTitle = `Image ${index + 1}`;
+      const title = item.title.trim() || deriveNodeImageTitle(normalizedSrc, fallbackTitle);
+
+      return {
+        ...item,
+        src: normalizedSrc,
+        title,
+        alt: item.alt.trim() || title,
+      };
+    })
+    .filter((item): item is NodeImageItem => Boolean(item));
+}
+
 export function ensureToolState(
   data: TaskData,
   tool: NodeToolType,
@@ -309,6 +403,7 @@ export function ensureToolState(
   const normalizedDocument = normalizeDocumentData(tools.document);
   const normalizedLink = normalizeLinkData(tools.link);
   const normalizedSchedule = normalizeScheduleData(tools.schedule);
+  const normalizedImage = normalizeImageData(tools.image);
 
   return {
     ...tools,
@@ -327,6 +422,9 @@ export function ensureToolState(
     schedule: tool === 'schedule'
       ? normalizedSchedule || createDefaultScheduleData(language)
       : normalizedSchedule,
+    image: tool === 'image'
+      ? normalizedImage || createDefaultImageData()
+      : normalizedImage,
   };
 }
 

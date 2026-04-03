@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
+import type { Key, ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 
-export type NodeToolAccent = 'sky' | 'emerald' | 'violet' | 'amber';
+export type NodeToolAccent = 'sky' | 'emerald' | 'violet' | 'amber' | 'rose';
 
 const TONE_MAP: Record<
   NodeToolAccent,
@@ -65,6 +65,18 @@ const TONE_MAP: Record<
     subtleHover: 'hover:bg-amber-100',
     subtleText: 'text-amber-600',
     dashed: 'hover:border-amber-300 hover:bg-amber-50/70',
+  },
+  rose: {
+    soft: 'bg-rose-50',
+    tint: 'bg-rose-500/10',
+    text: 'text-rose-600',
+    ring: 'ring-rose-200/80',
+    button: 'bg-rose-500 text-white',
+    buttonHover: 'hover:bg-rose-600',
+    subtle: 'bg-rose-50',
+    subtleHover: 'hover:bg-rose-100',
+    subtleText: 'text-rose-600',
+    dashed: 'hover:border-rose-300 hover:bg-rose-50/70',
   },
 };
 
@@ -158,6 +170,7 @@ export function NodeToolWorkspaceHeader({
 type NodeToolSectionProps = {
   children: ReactNode;
   className?: string;
+  key?: Key;
 };
 
 export function NodeToolSection({ children, className = '' }: NodeToolSectionProps) {

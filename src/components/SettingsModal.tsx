@@ -14,6 +14,7 @@ import {
   Globe,
   Hash,
   History,
+  ImageIcon,
   Info,
   Keyboard,
   Laptop,
@@ -874,6 +875,13 @@ export default function SettingsModal({ settings, language, onClose, onUpdate, o
                         icon: <CalendarDays className="w-5 h-5" />,
                         color: 'bg-amber-500',
                       },
+                      {
+                        key: 'image',
+                        label: language === 'zh' ? '图片素材' : 'Images',
+                        desc: language === 'zh' ? '截图、草图、参考图与视觉素材' : 'Screenshots, references, and visual assets',
+                        icon: <ImageIcon className="w-5 h-5" />,
+                        color: 'bg-rose-500',
+                      },
                     ].map((plugin) => (
                       <div
                         key={plugin.key}
@@ -1451,8 +1459,8 @@ export default function SettingsModal({ settings, language, onClose, onUpdate, o
                   <p className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 ${isDarkTheme ? 'text-slate-300' : 'text-neutral-500'}`}>One Yes, All Flow</p>
                   <p className={`max-w-xl text-sm leading-7 mb-6 ${isDarkTheme ? 'text-slate-300' : 'text-neutral-500'}`}>
                     {language === 'zh'
-                      ? 'YesFlow 0.3.0 将 AI 生成、可视化编排、节点资料沉淀与项目推进整合进同一个工作空间，让复杂目标真正可以在一张画布上持续推进。'
-                      : 'YesFlow 0.3.0 brings AI generation, visual orchestration, node-level context, and project progress into one workspace so complex goals can keep moving on a single canvas.'}
+                      ? 'YesFlow 0.3.1 将 AI 生成、可视化编排、节点资料与图片沉淀，以及项目推进整合进同一个工作空间，让复杂目标真正可以在一张画布上持续推进。'
+                      : 'YesFlow 0.3.1 brings AI generation, visual orchestration, node-level context, image references, and project progress into one workspace so complex goals can keep moving on a single canvas.'}
                   </p>
                   
                   <div className="flex flex-col items-center gap-3">

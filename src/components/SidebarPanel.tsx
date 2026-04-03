@@ -7,6 +7,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronRight,
+  CircleStop,
   Circle as CircleIcon,
   ClipboardList,
   Clock,
@@ -29,12 +30,12 @@ import {
 import SidebarFooter from './SidebarFooter';
 import CustomScrollArea from './CustomScrollArea';
 import { translations } from '../constants/translations';
-import type { NodeStatus, ProjectRecord, Settings, TaskData } from '../types';
+import type { NodeStatus, ProjectRecord, RecordAiState, Settings, TaskData, TaskMode } from '../types';
 
 type SidebarPanelProps = {
   language: 'zh' | 'en';
   themeMode: 'light' | 'dark';
-  isLoading: boolean;
+  isBatchAiLoading: boolean;
   hasApiKey: boolean;
   activeProviderName: string;
   settings: Settings;
@@ -46,6 +47,7 @@ type SidebarPanelProps = {
   currentRecordId: string | null;
   nodes: Node[];
   edges: Edge[];
+  mode: TaskMode;
   onNewProject: () => void;
   onDeleteSelectedEdge: () => void;
   onUpdateSelectedEdgeLabel: (value: string) => void;
@@ -56,7 +58,8 @@ type SidebarPanelProps = {
   onJumpToNode: (nodeId: string) => void;
   onSelectedPromptChange: (value: string) => void;
   onModifySelected: () => void;
-  onAbort: () => void;
+  onAbortSelectedAi: () => void;
+  onAbortPlanGeneration: () => void;
   onLoadRecord: (record: ProjectRecord) => void;
   onDeleteRecord: (recordId: string) => void;
   onReorderRecords: (sourceId: string, targetId: string, position?: 'before' | 'after') => void;
@@ -70,6 +73,7 @@ type SidebarPanelProps = {
   streamingContent?: string;
   hideGeneratingRecord?: boolean;
   onGeneratingCardAnchorRectChange?: (rect: { x: number; y: number; width: number; height: number } | null) => void;
+  recordAiStates: Record<string, RecordAiState>;
 };
 
 const EDGE_COLORS = ['sky', 'green', 'amber', 'rose', 'indigo', 'neutral'] as const;
@@ -119,11 +123,27 @@ function presetIcon(type: string) {
   return <Zap className="w-3.5 h-3.5" />;
 }
 
+function getRecordModeMeta(mode: TaskMode, language: 'zh' | 'en') {
+  if (mode === 'daily') {
+    return {
+      label: language === 'zh' ? '日常' : 'Daily',
+      icon: <Clock className="w-2.5 h-2.5" />,
+      className: 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/80',
+    };
+  }
+
+  return {
+    label: language === 'zh' ? '专业' : 'Pro',
+    icon: <LayoutDashboard className="w-2.5 h-2.5" />,
+    className: 'bg-sky-50 text-sky-600 ring-1 ring-sky-200/80',
+  };
+}
+
 export default function SidebarPanel(props: SidebarPanelProps) {
   const {
     language,
     themeMode,
-    isLoading,
+    isBatchAiLoading,
     hasApiKey,
     activeProviderName,
     settings,
@@ -135,6 +155,7 @@ export default function SidebarPanel(props: SidebarPanelProps) {
     currentRecordId,
     nodes,
     edges,
+    mode,
     onNewProject,
     onDeleteSelectedEdge,
     onUpdateSelectedEdgeLabel,
@@ -145,7 +166,8 @@ export default function SidebarPanel(props: SidebarPanelProps) {
     onJumpToNode,
     onSelectedPromptChange,
     onModifySelected,
-    onAbort,
+    onAbortSelectedAi,
+    onAbortPlanGeneration,
     onLoadRecord,
     onDeleteRecord,
     onReorderRecords,
@@ -159,6 +181,7 @@ export default function SidebarPanel(props: SidebarPanelProps) {
     streamingContent,
     hideGeneratingRecord,
     onGeneratingCardAnchorRectChange,
+    recordAiStates,
   } = props;
 
   const t = translations[language];
@@ -194,7 +217,8 @@ export default function SidebarPanel(props: SidebarPanelProps) {
   const tickerLastCommittedLineRef = React.useRef(streamingIdleText);
   const tickerShiftDurationMs = 420;
   const recordSlotRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
-  const generatingTargetRecordId = generatingRecordId ?? localRecords[0]?.id ?? null;
+  const generatingStandaloneSlotRef = React.useRef<HTMLDivElement | null>(null);
+  const generatingTargetRecordId = generatingRecordId ?? null;
   const hasGeneratingTargetRecord = generatingTargetRecordId
     ? localRecords.some((record) => record.id === generatingTargetRecordId)
     : false;
@@ -311,7 +335,7 @@ export default function SidebarPanel(props: SidebarPanelProps) {
     const updateRect = () => {
       const element = generatingTargetRecordId
         ? (recordSlotRefs.current[generatingTargetRecordId] ?? recordsListRef.current)
-        : recordsListRef.current;
+        : (generatingStandaloneSlotRef.current ?? recordsListRef.current);
       if (!element) {
         onGeneratingCardAnchorRectChange(null);
         return;
@@ -335,11 +359,13 @@ export default function SidebarPanel(props: SidebarPanelProps) {
 
     const element = recordsListRef.current;
     const targetElement = generatingTargetRecordId ? recordSlotRefs.current[generatingTargetRecordId] : null;
+    const standaloneElement = !generatingTargetRecordId ? generatingStandaloneSlotRef.current : null;
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(scheduleUpdate);
       if (element) observer.observe(element);
       if (targetElement && targetElement !== element) observer.observe(targetElement);
+      if (standaloneElement && standaloneElement !== element && standaloneElement !== targetElement) observer.observe(standaloneElement);
     }
 
     window.addEventListener('resize', scheduleUpdate);
@@ -454,67 +480,98 @@ export default function SidebarPanel(props: SidebarPanelProps) {
           className={`absolute inset-0 h-[68px] overflow-hidden rounded-xl border border-primary/25 bg-primary/5 p-3 ${isGeneratingPlanCompleting ? 'generating-complete' : ''}`}
         >
           <div className="absolute inset-0 generating-shimmer" />
-          <div className="relative">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                {isGeneratingPlanCompleting ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                ) : (
-                  <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
-                )}
-                <span className="text-xs font-bold text-primary truncate">
-                  {isGeneratingPlanCompleting
-                    ? (language === 'zh' ? 'AI 生成完成' : 'AI Plan Ready')
-                    : (language === 'zh' ? 'AI 正在生成计划...' : 'AI Generating...')}
-                </span>
-              </div>
-              {!isGeneratingPlanCompleting && (
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary/55 animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary/55 animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary/55 animate-bounce" style={{ animationDelay: '300ms' }} />
+          <div className="relative flex h-full items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="flex min-w-0 flex-1 flex-col justify-center">
+                <div className="flex min-w-0 items-center gap-2">
+                  {isGeneratingPlanCompleting ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  ) : (
+                    <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+                  )}
+                  <span className="text-xs font-bold text-primary truncate">
+                    {isGeneratingPlanCompleting
+                      ? (language === 'zh' ? 'AI 生成完成' : 'AI Plan Ready')
+                      : (language === 'zh' ? 'AI 正在生成计划...' : 'AI Generating...')}
+                  </span>
+                  {!isGeneratingPlanCompleting && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/55 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/55 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/55 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="relative mt-1 h-6 overflow-hidden pr-3 text-[9.5px] leading-3 text-primary/75">
-              <AnimatePresence initial={false}>
-                {streamTicker.upper && (
+                <div className="relative mt-1 h-6 overflow-hidden pr-1 text-[9.5px] leading-3 text-primary/75">
+                  <AnimatePresence initial={false}>
+                    {streamTicker.upper && (
+                      <motion.div
+                        key={`stream-upper-${streamTicker.step}`}
+                        initial={{ y: 0, opacity: 0.82 }}
+                        animate={{ y: -12, opacity: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: tickerShiftDurationMs / 1000, ease: [0.2, 0.8, 0.2, 1] }}
+                        className="absolute left-0 right-0 top-0 h-3 overflow-hidden whitespace-nowrap text-ellipsis"
+                      >
+                        {streamTicker.upper}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   <motion.div
-                    key={`stream-upper-${streamTicker.step}`}
-                    initial={{ y: 0, opacity: 0.82 }}
-                    animate={{ y: -12, opacity: 0 }}
-                    exit={{ opacity: 0 }}
+                    key={`stream-lower-${streamTicker.step}-${streamTicker.lower}`}
+                    initial={streamTicker.upper ? { y: 12, opacity: 0.2 } : { y: 0, opacity: 0.85 }}
+                    animate={{ y: 0, opacity: 0.88 }}
                     transition={{ duration: tickerShiftDurationMs / 1000, ease: [0.2, 0.8, 0.2, 1] }}
-                    className="absolute left-0 right-0 top-0 h-3 overflow-hidden whitespace-nowrap text-ellipsis"
+                    className={`absolute left-0 right-0 top-0 h-3 overflow-hidden whitespace-nowrap text-ellipsis ${isGeneratingPlanCompleting ? '' : 'text-primary/70'}`}
                   >
-                    {streamTicker.upper}
+                    {streamTicker.lower}
                   </motion.div>
-                )}
-              </AnimatePresence>
-              <motion.div
-                key={`stream-lower-${streamTicker.step}-${streamTicker.lower}`}
-                initial={streamTicker.upper ? { y: 12, opacity: 0.2 } : { y: 0, opacity: 0.85 }}
-                animate={{ y: 0, opacity: 0.88 }}
-                transition={{ duration: tickerShiftDurationMs / 1000, ease: [0.2, 0.8, 0.2, 1] }}
-                className={`absolute left-0 right-0 top-0 h-3 overflow-hidden whitespace-nowrap text-ellipsis ${isGeneratingPlanCompleting ? '' : 'text-primary/70'}`}
-              >
-                {streamTicker.lower}
-              </motion.div>
-              {!isGeneratingPlanCompleting && (
-                <span className="absolute right-0 top-0 inline-block h-2.5 w-[1.5px] bg-primary/55 animate-pulse" />
-              )}
+                  {!isGeneratingPlanCompleting && (
+                    <span className="absolute right-0 top-0 inline-block h-2.5 w-[1.5px] bg-primary/55 animate-pulse" />
+                  )}
+                </div>
+              </div>
             </div>
+            {!isGeneratingPlanCompleting && (
+              <button
+                type="button"
+                onClick={onAbortPlanGeneration}
+                aria-label={language === 'zh' ? '停止生成' : 'Stop generation'}
+                title={language === 'zh' ? '停止生成' : 'Stop generation'}
+                className="flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-full bg-red-500 text-white shadow-[0_12px_24px_-14px_rgba(239,68,68,0.92)] ring-2 ring-white/80 transition-all hover:scale-[1.06] hover:bg-red-600 hover:shadow-[0_14px_28px_-14px_rgba(220,38,38,0.95)]"
+              >
+                <CircleStop className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </motion.div>
       )}
     </AnimatePresence>
-  ), [isGeneratingPlan, isGeneratingPlanCompleting, language, streamTicker.lower, streamTicker.step, streamTicker.upper, tickerShiftDurationMs]);
+  ), [isGeneratingPlan, isGeneratingPlanCompleting, language, onAbortPlanGeneration, streamTicker.lower, streamTicker.step, streamTicker.upper, tickerShiftDurationMs]);
 
   const renderRecordCard = React.useCallback((record: ProjectRecord, options?: { hidden?: boolean; entrance?: boolean }) => {
     const isHidden = options?.hidden ?? false;
     const isActive = currentRecordId === record.id;
     const isDragging = draggingRecordId === record.id;
     const showDropIndicator = dropIndicator?.recordId === record.id && draggingRecordId !== record.id;
+    const modeMeta = getRecordModeMeta(record.mode, language);
+    const recordAiState = recordAiStates[record.id];
+    const isRecordAiRunning = (recordAiState?.runningNodeIds.length || 0) > 0;
+    const hasUnreadAiResult = Boolean(recordAiState?.unread && recordAiState?.latestStatus);
+    const hasAiResult = Boolean(recordAiState?.latestStatus);
+    const aiResultTone = recordAiState?.latestStatus === 'error'
+      ? {
+          dot: 'bg-red-500',
+          tint: 'text-red-500',
+          ring: 'ring-red-200/80',
+          sweep: 'from-transparent via-red-400/35 to-transparent',
+        }
+      : {
+          dot: 'bg-emerald-500',
+          tint: 'text-emerald-500',
+          ring: 'ring-emerald-200/80',
+          sweep: 'from-transparent via-emerald-400/35 to-transparent',
+        };
 
     return (
       <div
@@ -545,35 +602,77 @@ export default function SidebarPanel(props: SidebarPanelProps) {
           />
         )}
         <div
-          className={`relative h-full p-3 rounded-xl border transition-all ${
+          className={`relative h-full rounded-xl border p-3 transition-all ${
             isActive
               ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10'
               : 'bg-neutral-50 border-neutral-100 hover:border-neutral-200 hover:bg-white'
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex min-w-0 flex-1 items-center gap-2 pr-6">
+          {hasAiResult && (
+            <div
+              className="pointer-events-none absolute right-2 top-2 z-10"
+              title={recordAiState?.latestMessage || (recordAiState?.latestStatus === 'error'
+                ? (language === 'zh' ? 'AI 任务失败' : 'AI task failed')
+                : (language === 'zh' ? 'AI 任务已完成' : 'AI task completed'))}
+            >
+              <span
+                className={`block h-2.5 w-2.5 rounded-full ${aiResultTone.dot} ${
+                  recordAiState?.unread ? 'ring-4' : ''
+                } ${recordAiState?.latestStatus === 'error' ? 'ring-red-100/90' : 'ring-emerald-100/90'}`}
+              />
+            </div>
+          )}
+          {hasUnreadAiResult && (
+            <motion.div
+              initial={{ x: '-120%', opacity: 0 }}
+              animate={{ x: '140%', opacity: [0, 0.9, 0] }}
+              transition={{ duration: 0.95, ease: [0.2, 0.8, 0.2, 1] }}
+              className={`pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r ${aiResultTone.sweep}`}
+            />
+          )}
+          <div className="flex h-full items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <div className={`flex shrink-0 items-center justify-center rounded-md border border-neutral-200/80 bg-white/90 p-1 text-neutral-300 transition-opacity ${
                 canReorderRecords ? 'opacity-70 group-hover:opacity-100' : 'opacity-40'
               }`}>
                 <GripVertical className="w-3.5 h-3.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <h4 className={`text-xs font-bold truncate ${isActive ? 'text-primary' : 'text-neutral-700'}`}>{record.name}</h4>
+                <div className="flex items-center gap-2">
+                  <h4 className={`min-w-0 flex-1 text-xs font-bold truncate ${isActive ? 'text-primary' : 'text-neutral-700'}`}>{record.name}</h4>
+                </div>
                 <div className="flex items-center gap-1.5 mt-1 text-[10px] text-neutral-400">
                   <Clock className="w-2.5 h-2.5" />
                   <span>{new Date(record.lastModified).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
               </div>
             </div>
-            <button
-              onClick={(event) => handleDeleteRecordClick(record, event)}
-              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all ${
-                isHidden ? 'pointer-events-none opacity-0' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex shrink-0 items-center gap-2 self-center">
+              <span className={`inline-flex h-6 shrink-0 items-center gap-1 rounded-full px-2.5 text-[9px] font-black uppercase tracking-[0.14em] ${modeMeta.className}`}>
+                {modeMeta.icon}
+                <span>{modeMeta.label}</span>
+              </span>
+              {isRecordAiRunning ? (
+                <div
+                  className={`relative flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15 ${
+                    isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+                  }`}
+                  title={language === 'zh' ? '该记录中有 AI 任务进行中' : 'AI task running in this record'}
+                >
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                </div>
+              ) : (
+                <button
+                  onClick={(event) => handleDeleteRecordClick(record, event)}
+                  className={`flex h-6 w-6 items-center justify-center rounded-lg text-neutral-300 transition-all hover:bg-red-50 hover:text-red-500 ${
+                    isHidden ? 'pointer-events-none opacity-0' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                  title={language === 'zh' ? '删除记录' : 'Delete record'}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -590,6 +689,7 @@ export default function SidebarPanel(props: SidebarPanelProps) {
     handleRecordDragStart,
     handleRecordDrop,
     language,
+    recordAiStates,
   ]);
 
   const renderEdgeList = () => {
@@ -661,6 +761,7 @@ export default function SidebarPanel(props: SidebarPanelProps) {
 
   const renderNodeDetailsPanel = () => {
     if (!selectedNode || !nodeData) return null;
+    const isDailyTaskView = mode === 'daily' && !nodeData.isGroup;
 
     return (
       <div className="space-y-4">
@@ -673,15 +774,17 @@ export default function SidebarPanel(props: SidebarPanelProps) {
             className="w-full mt-1 px-3 py-2 text-sm border border-neutral-200 rounded-lg outline-none bg-white font-medium focus:ring-2 focus:ring-primary/20 transition-all"
           />
         </div>
-        <div>
-          <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">{t.nodeDescription}</label>
-          <textarea
-            value={nodeData.description}
-            onChange={(e) => onUpdateNodeData(selectedNode.id, { description: e.target.value })}
-            className="w-full mt-1 px-3 py-2 text-xs border border-neutral-200 rounded-lg outline-none bg-white h-24 resize-none focus:ring-2 focus:ring-primary/20 transition-all"
-          />
-        </div>
-        {!nodeData.isGroup && (
+        {!isDailyTaskView && (
+          <div>
+            <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">{t.nodeDescription}</label>
+            <textarea
+              value={nodeData.description}
+              onChange={(e) => onUpdateNodeData(selectedNode.id, { description: e.target.value })}
+              className="w-full mt-1 px-3 py-2 text-xs border border-neutral-200 rounded-lg outline-none bg-white h-24 resize-none focus:ring-2 focus:ring-primary/20 transition-all"
+            />
+          </div>
+        )}
+        {!nodeData.isGroup && !isDailyTaskView && (
           <div>
             <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block mb-2">{t.category}</label>
             <input
@@ -840,12 +943,12 @@ export default function SidebarPanel(props: SidebarPanelProps) {
             className="w-full h-24 p-3 border border-neutral-200 rounded-xl text-xs outline-none bg-white"
           />
           <div className="flex gap-2 mt-2">
-            <button onClick={onModifySelected} disabled={isLoading} className="flex-1 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
-              {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            <button onClick={onModifySelected} disabled={isBatchAiLoading} className="flex-1 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
+              {isBatchAiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
               {t.modifySelected}
             </button>
-            {isLoading && (
-              <button onClick={onAbort} className="px-3 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg text-xs font-bold hover:bg-red-100 transition-all">
+            {isBatchAiLoading && (
+              <button onClick={onAbortSelectedAi} className="px-3 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg text-xs font-bold hover:bg-red-100 transition-all">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
@@ -861,6 +964,11 @@ export default function SidebarPanel(props: SidebarPanelProps) {
                 <span>{language === 'zh' ? '项目记录' : 'Project Records'} ({localRecords.length})</span>
               </div>
               <div className="space-y-2" ref={recordsListRef}>
+                {isGeneratingPlan && !hasGeneratingTargetRecord && (
+                  <div ref={generatingStandaloneSlotRef} className="relative h-[68px]">
+                    {renderGeneratingCard()}
+                  </div>
+                )}
                 {localRecords.map((record) => {
                   const isGeneratingTarget = generatingTargetRecordId === record.id;
 
@@ -880,11 +988,6 @@ export default function SidebarPanel(props: SidebarPanelProps) {
                     </div>
                   );
                 })}
-                {isGeneratingPlan && !hasGeneratingTargetRecord && (
-                  <div className="relative h-[68px]">
-                    {renderGeneratingCard()}
-                  </div>
-                )}
               </div>
             </div>
           ) : (

@@ -1,6 +1,6 @@
 # YesFlow
 
-> v0.3.0 · A visual AI workflow workspace for planning, structuring, and pushing complex goals forward on one canvas.
+> v0.3.1 · A visual AI workflow workspace for planning, structuring, and pushing complex goals forward on one canvas.
 
 [English](./README.md) · [中文](./README_ZH.md)
 
@@ -15,24 +15,24 @@
   <a href="https://github.com/heeq666/YesFlow/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License">
   </a>
-  <img src="https://img.shields.io/badge/Version-0.3.0-black?style=flat-square" alt="Version 0.3.0">
+  <img src="https://img.shields.io/badge/Version-0.3.1-black?style=flat-square" alt="Version 0.3.1">
   <img src="https://img.shields.io/badge/React-19-149eca?style=flat-square&logo=react" alt="React 19">
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript" alt="TypeScript 5">
 </p>
 
 ## Overview
 
-YesFlow turns a natural-language goal into an editable execution map. You can generate a plan with AI, refine it on a node-based canvas, and keep each node's supporting materials inside the same workspace with documents, links, schedules, and tables.
+YesFlow turns a natural-language goal into an editable execution map. You can generate a plan with AI, refine it on a node-based canvas, and keep each node's supporting materials inside the same workspace with documents, images, links, schedules, and tables.
 
-This release makes YesFlow feel less like a simple flow editor and more like a practical project cockpit for AI-assisted work.
+Version `0.3.1` sharpens the day-to-day experience with node image attachments, cleaner project persistence, and better feedback around long-running AI actions.
 
-## What's New in 0.3.0
+## What's New in 0.3.1
 
-- Node tool workspace with `Document`, `Table`, `Link`, and `Schedule` panels
-- Right-side utility area with calendar view and quick context switching
-- Multi-provider AI setup for MiniMax, DeepSeek, Qwen, Doubao, Zhipu, and OpenAI-compatible endpoints
-- Project records with local persistence, quick loading, and drag-to-reorder
-- Better workflow editing with grouping, edge labels/colors, import/export, and richer appearance controls
+- Node image tool with local upload and remote URL support
+- Project records now keep per-record AI task progress, success states, and failure feedback
+- Save/export flows sanitize transient UI fields before writing JSON or local records
+- Shared task layout constants keep canvas editing, group generation, and AI placement more consistent
+- Runtime error boundary prevents full blank-screen failures and surfaces crash details in development
 
 ## Core Capabilities
 

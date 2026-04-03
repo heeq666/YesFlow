@@ -51,6 +51,45 @@ export function useCanvasHotkeys({
   activeKeysRef.current = activeKeys;
   const [isLmbActive, setIsLmbActive] = useState(false);
 
+  // Refs for all values used in event listeners — avoids re-attaching listeners on every change
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  const settingsRef = useRef(settings);
+  const languageRef = useRef(language);
+  const fileInputRef_ = fileInputRef;
+  const handleUndoRef = useRef(handleUndo);
+  const handleRedoRef = useRef(handleRedo);
+  const handleCopyRef = useRef(handleCopy);
+  const handlePasteRef = useRef(handlePaste);
+  const handleCutRef = useRef(handleCut);
+  const handleSaveToLocalRef = useRef(handleSaveToLocal);
+  const handleSaveFileRef = useRef(handleSaveFile);
+  const handleGroupSelectionRef = useRef(handleGroupSelection);
+  const handleUngroupRef = useRef(handleUngroup);
+  const deleteNodesAndReconnectRef = useRef(deleteNodesAndReconnect);
+  const showStatusRef = useRef(showStatus);
+  const takeSnapshotRef = useRef(takeSnapshot);
+  const setEdgesRef = useRef(setEdges);
+
+  // Keep refs in sync when values change
+  useEffect(() => { setEdgesRef.current = setEdges; }, [setEdges]);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { languageRef.current = language; }, [language]);
+  useEffect(() => { handleUndoRef.current = handleUndo; }, [handleUndo]);
+  useEffect(() => { handleRedoRef.current = handleRedo; }, [handleRedo]);
+  useEffect(() => { handleCopyRef.current = handleCopy; }, [handleCopy]);
+  useEffect(() => { handlePasteRef.current = handlePaste; }, [handlePaste]);
+  useEffect(() => { handleCutRef.current = handleCut; }, [handleCut]);
+  useEffect(() => { handleSaveToLocalRef.current = handleSaveToLocal; }, [handleSaveToLocal]);
+  useEffect(() => { handleSaveFileRef.current = handleSaveFile; }, [handleSaveFile]);
+  useEffect(() => { handleGroupSelectionRef.current = handleGroupSelection; }, [handleGroupSelection]);
+  useEffect(() => { handleUngroupRef.current = handleUngroup; }, [handleUngroup]);
+  useEffect(() => { deleteNodesAndReconnectRef.current = deleteNodesAndReconnect; }, [deleteNodesAndReconnect]);
+  useEffect(() => { showStatusRef.current = showStatus; }, [showStatus]);
+  useEffect(() => { takeSnapshotRef.current = takeSnapshot; }, [takeSnapshot]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
@@ -58,65 +97,70 @@ export function useCanvasHotkeys({
 
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
 
-      if (matchesHotkey(settings.hotkeys.undo, event)) { event.preventDefault(); handleUndo(); }
-      if (matchesHotkey(settings.hotkeys.redo, event)) { event.preventDefault(); handleRedo(); }
+      const s = settingsRef.current;
 
-      if (matchesHotkey(settings.hotkeys.copy, event)) handleCopy();
-      if (matchesHotkey(settings.hotkeys.paste, event)) handlePaste();
-      if (matchesHotkey(settings.hotkeys.cut, event)) handleCut();
+      if (matchesHotkey(s.hotkeys.undo, event)) { event.preventDefault(); handleUndoRef.current(); }
+      if (matchesHotkey(s.hotkeys.redo, event)) { event.preventDefault(); handleRedoRef.current(); }
 
-      if (matchesHotkey(settings.hotkeys.save, event)) {
+      if (matchesHotkey(s.hotkeys.copy, event)) handleCopyRef.current();
+      if (matchesHotkey(s.hotkeys.paste, event)) handlePasteRef.current();
+      if (matchesHotkey(s.hotkeys.cut, event)) handleCutRef.current();
+
+      if (matchesHotkey(s.hotkeys.save, event)) {
         event.preventDefault();
-        handleSaveToLocal();
+        handleSaveToLocalRef.current();
       }
 
-      if (matchesHotkey(settings.hotkeys.export, event)) {
+      if (matchesHotkey(s.hotkeys.export, event)) {
         event.preventDefault();
-        handleSaveFile();
+        handleSaveFileRef.current();
       }
 
-      if (matchesHotkey(settings.hotkeys.open, event)) {
+      if (matchesHotkey(s.hotkeys.open, event)) {
         event.preventDefault();
-        fileInputRef.current?.click();
+        fileInputRef_.current?.click();
       }
 
-      if (matchesHotkey(settings.hotkeys.pan, event) || matchesHotkey(settings.hotkeys.select, event)) {
-        if (settings.hotkeys.pan.toLowerCase().includes('space')) {
+      if (matchesHotkey(s.hotkeys.pan, event) || matchesHotkey(s.hotkeys.select, event)) {
+        if (s.hotkeys.pan.toLowerCase().includes('space')) {
           event.preventDefault();
         }
       }
 
-      if (matchesHotkey(settings.hotkeys.group, event)) {
+      if (matchesHotkey(s.hotkeys.group, event)) {
         event.preventDefault();
-        handleGroupSelection();
+        handleGroupSelectionRef.current();
       }
 
-      if (matchesHotkey(settings.hotkeys.ungroup, event)) {
+      if (matchesHotkey(s.hotkeys.ungroup, event)) {
         event.preventDefault();
-        const selectedGroup = nodes.find(n => n.selected && n.type === 'group');
+        const selectedGroup = nodesRef.current.find(n => n.selected && n.type === 'group');
         if (selectedGroup) {
-          handleUngroup(selectedGroup.id);
+          handleUngroupRef.current(selectedGroup.id);
         }
       }
 
-      if (matchesHotkey(settings.hotkeys.delete, event)) {
-        const selectedNodeIds = nodes.filter((n) => n.selected).map((n) => n.id);
-        const selectedEdgeIds = edges.filter((e) => e.selected).map((e) => e.id);
+      if (matchesHotkey(s.hotkeys.delete, event)) {
+        const ns = nodesRef.current;
+        const es = edgesRef.current;
+        const lang = languageRef.current;
+        const selectedNodeIds = ns.filter((n) => n.selected).map((n) => n.id);
+        const selectedEdgeIds = es.filter((e) => e.selected).map((e) => e.id);
 
         if (selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) {
           event.preventDefault();
         }
 
         if (selectedNodeIds.length > 0) {
-          deleteNodesAndReconnect(selectedNodeIds);
-          showStatus(language === 'zh' ? '已删除' : 'Deleted', <Trash2 className="w-3.5 h-3.5" />);
+          deleteNodesAndReconnectRef.current(selectedNodeIds);
+          showStatusRef.current(lang === 'zh' ? '已删除' : 'Deleted', <Trash2 className="w-3.5 h-3.5" />);
         } else if (selectedEdgeIds.length > 0) {
-          setEdges((eds) => {
+          setEdgesRef.current((eds) => {
             const next = eds.filter((e) => !e.selected);
-            takeSnapshot(nodes, next);
+            takeSnapshotRef.current(ns, next);
             return next;
           });
-          showStatus(language === 'zh' ? '已删除' : 'Deleted', <Trash2 className="w-3.5 h-3.5" />);
+          showStatusRef.current(lang === 'zh' ? '已删除' : 'Deleted', <Trash2 className="w-3.5 h-3.5" />);
         }
       }
     };
@@ -130,59 +174,19 @@ export function useCanvasHotkeys({
       });
     };
 
-    const handleMouseDown = (event: MouseEvent) => {
-      if (event.button === 0) {
-        setIsLmbActive(true);
-        setActiveKeys((prev) => new Set(prev).add('lmb'));
-      }
-    };
-
-    const handleMouseUp = (event: MouseEvent) => {
-      if (event.button === 0) {
-        setIsLmbActive(false);
-        setActiveKeys((prev) => {
-          const next = new Set(prev);
-          next.delete('lmb');
-          return next;
-        });
-      }
-    };
-
     const handleBlur = () => {
       setActiveKeys(new Set());
-      setIsLmbActive(false);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('blur', handleBlur);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [
-    nodes,
-    edges,
-    settings,
-    language,
-    fileInputRef,
-    handleUndo,
-    handleRedo,
-    handleCopy,
-    handlePaste,
-    handleCut,
-    handleSaveToLocal,
-    handleSaveFile,
-    deleteNodesAndReconnect,
-    showStatus,
-    takeSnapshot,
-    setEdges,
-  ]);
+  }, [fileInputRef_]);
 
   return {
     activeKeys,

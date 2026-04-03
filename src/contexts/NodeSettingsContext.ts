@@ -1,9 +1,9 @@
 import React from 'react';
 import { DEFAULT_VISUALS } from '../constants/appearancePresets';
-import type { NodeToolSettings, ThemeMode, VisualSettings } from '../types';
+import type { NodeToolSettings, TaskMode, ThemeMode, VisualSettings } from '../types';
 
 const DEFAULT_NODE_TOOL_SETTINGS: NodeToolSettings = {
-  enabled: true,
+  enabled: false,
   showToolbarOnSelect: true,
   panelWidth: 420,
   enabledTools: {
@@ -11,6 +11,7 @@ const DEFAULT_NODE_TOOL_SETTINGS: NodeToolSettings = {
     document: true,
     link: true,
     schedule: true,
+    image: true,
   },
   calendar: {
     enabled: true,
@@ -25,9 +26,11 @@ export const NodeSettingsContext = React.createContext<{
   visuals: VisualSettings;
   themeMode: ThemeMode;
   nodeTools: NodeToolSettings;
+  mode: TaskMode;
 }>({
   completedStyle: 'logo',
   visuals: DEFAULT_VISUALS,
   themeMode: 'light',
   nodeTools: DEFAULT_NODE_TOOL_SETTINGS,
+  mode: 'professional',
 });
