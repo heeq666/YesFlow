@@ -9,7 +9,9 @@ type HydrateNodeData = {
   language: 'zh' | 'en';
   onStatusChange: (id: string, status: any) => void;
   onUpdateData: (id: string, updates: Partial<TaskData>) => void;
+  onOpenToolPanel: (id: string, tool: any) => void;
   onAddNode: (event: any, id: string, position: any) => void;
+  onUngroup: (groupId: string) => void;
 };
 
 type UseProjectFileIOParams = {
@@ -31,7 +33,7 @@ type UseProjectFileIOParams = {
 };
 
 function stripNodeHandlers(node: Node): Node {
-  const { onStatusChange, onUpdateData, onAddNode, ...cleanData } = (node.data || {}) as Record<string, unknown>;
+  const { onStatusChange, onUpdateData, onOpenToolPanel, onAddNode, onUngroup, ...cleanData } = (node.data || {}) as Record<string, unknown>;
   return { ...node, data: cleanData };
 }
 
@@ -57,8 +59,12 @@ export function useProjectFileIO({
   setImportMessage,
   fileInputRef,
 }: UseProjectFileIOParams) {
-  const saveFile = useCallback(() => {
-    const cleanName = projectName.replace(/\.(json|zip|txt)$/i, '').replace(/\s+/g, '_');
+  const saveFile = useCallback((fileName?: string) => {
+    const rawName = (fileName || projectName).trim();
+    const cleanName = (rawName || 'YesFlow Project')
+      .replace(/\.(json|zip|txt)$/i, '')
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
+      .trim() || 'YesFlow Project';
     const exportData = {
       projectName: cleanName,
       language,
@@ -96,7 +102,9 @@ export function useProjectFileIO({
             language: data.language || language,
             onStatusChange: hydrateNodeData.onStatusChange,
             onUpdateData: hydrateNodeData.onUpdateData,
+            onOpenToolPanel: hydrateNodeData.onOpenToolPanel,
             onAddNode: (e: any, id: string, position: any) => hydrateNodeData.onAddNode(e, id, position),
+            ...(node.type === 'group' ? { onUngroup: hydrateNodeData.onUngroup } : null),
           },
         }));
 

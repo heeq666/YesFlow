@@ -2,6 +2,290 @@
 
 @theme {
   --color-primary: #2563eb; /* blue-600 */
+  --font-sans: "MiSans", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+
+.app-shell {
+  color-scheme: light;
+  --overlay-scrollbar-thumb: rgba(148, 163, 184, 0.34);
+  --overlay-scrollbar-thumb-hover: rgba(100, 116, 139, 0.82);
+  --overlay-scrollbar-thumb-active: rgba(71, 85, 105, 0.92);
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.06), transparent 24%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  transition: background 0.35s ease, color 0.35s ease;
+}
+
+.app-shell.theme-dark {
+  color-scheme: dark;
+  --overlay-scrollbar-thumb: rgba(100, 116, 139, 0.42);
+  --overlay-scrollbar-thumb-hover: rgba(148, 163, 184, 0.88);
+  --overlay-scrollbar-thumb-active: rgba(203, 213, 225, 0.96);
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.14), transparent 24%),
+    linear-gradient(180deg, #07111f 0%, #0b1526 100%);
+}
+
+.app-shell.theme-dark .bg-white {
+  background-color: #0f1829 !important;
+}
+
+.app-shell.theme-dark .bg-white\/90 {
+  background-color: rgba(15, 24, 41, 0.9) !important;
+}
+
+.app-shell.theme-dark .bg-white\/88 {
+  background-color: rgba(15, 24, 41, 0.88) !important;
+}
+
+.app-shell.theme-dark .bg-white\/80 {
+  background-color: rgba(15, 24, 41, 0.8) !important;
+}
+
+.app-shell.theme-dark .bg-white\/92 {
+  background-color: rgba(15, 24, 41, 0.92) !important;
+}
+
+.app-shell.theme-dark .bg-white\/95 {
+  background-color: rgba(15, 24, 41, 0.95) !important;
+}
+
+.app-shell.theme-dark .bg-neutral-50 {
+  background-color: #101b2d !important;
+}
+
+.app-shell.theme-dark .bg-neutral-50\/50 {
+  background-color: rgba(16, 27, 45, 0.68) !important;
+}
+
+.app-shell.theme-dark .bg-neutral-50\/80 {
+  background-color: rgba(16, 27, 45, 0.82) !important;
+}
+
+.app-shell.theme-dark .bg-neutral-50\/40,
+.app-shell.theme-dark .bg-neutral-50\/20 {
+  background-color: rgba(16, 27, 45, 0.58) !important;
+}
+
+.app-shell.theme-dark .bg-neutral-100 {
+  background-color: #162338 !important;
+}
+
+.app-shell.theme-dark .bg-neutral-100\/50 {
+  background-color: rgba(22, 35, 56, 0.7) !important;
+}
+
+.app-shell.theme-dark .bg-neutral-200 {
+  background-color: #1d2a40 !important;
+}
+
+.app-shell.theme-dark .bg-amber-50,
+.app-shell.theme-dark .bg-amber-50\/50,
+.app-shell.theme-dark .bg-amber-50\/70 {
+  background-color: rgba(245, 158, 11, 0.14) !important;
+}
+
+.app-shell.theme-dark .bg-violet-50,
+.app-shell.theme-dark .bg-violet-50\/70 {
+  background-color: rgba(139, 92, 246, 0.15) !important;
+}
+
+.app-shell.theme-dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.14) !important;
+}
+
+.app-shell.theme-dark .bg-purple-50 {
+  background-color: rgba(168, 85, 247, 0.15) !important;
+}
+
+.app-shell.theme-dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+}
+
+.app-shell.theme-dark .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.14) !important;
+}
+
+.app-shell.theme-dark .bg-sky-50,
+.app-shell.theme-dark .bg-sky-50\/70 {
+  background-color: rgba(14, 165, 233, 0.15) !important;
+}
+
+.app-shell.theme-dark .border-neutral-50,
+.app-shell.theme-dark .border-neutral-100,
+.app-shell.theme-dark .border-neutral-200,
+.app-shell.theme-dark .border-neutral-300 {
+  border-color: #24344f !important;
+}
+
+.app-shell.theme-dark .border-amber-100,
+.app-shell.theme-dark .border-amber-200,
+.app-shell.theme-dark .border-amber-300 {
+  border-color: rgba(245, 158, 11, 0.32) !important;
+}
+
+.app-shell.theme-dark .border-violet-100,
+.app-shell.theme-dark .border-violet-200,
+.app-shell.theme-dark .border-violet-300 {
+  border-color: rgba(139, 92, 246, 0.34) !important;
+}
+
+.app-shell.theme-dark .border-blue-100,
+.app-shell.theme-dark .border-blue-200,
+.app-shell.theme-dark .border-blue-300 {
+  border-color: rgba(59, 130, 246, 0.32) !important;
+}
+
+.app-shell.theme-dark .border-purple-100,
+.app-shell.theme-dark .border-purple-200,
+.app-shell.theme-dark .border-purple-300 {
+  border-color: rgba(168, 85, 247, 0.34) !important;
+}
+
+.app-shell.theme-dark .border-red-100,
+.app-shell.theme-dark .border-red-200 {
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.app-shell.theme-dark .border-sky-100,
+.app-shell.theme-dark .border-sky-200,
+.app-shell.theme-dark .border-sky-300 {
+  border-color: rgba(14, 165, 233, 0.34) !important;
+}
+
+.app-shell.theme-dark .border-white\/80 {
+  border-color: rgba(71, 85, 105, 0.42) !important;
+}
+
+.app-shell.theme-dark .border-white {
+  border-color: #0f1829 !important;
+}
+
+.app-shell.theme-dark .text-neutral-900,
+.app-shell.theme-dark .text-neutral-800,
+.app-shell.theme-dark .text-neutral-700 {
+  color: #eef4ff !important;
+}
+
+.app-shell.theme-dark .text-neutral-600,
+.app-shell.theme-dark .text-neutral-500 {
+  color: #b0bfd8 !important;
+}
+
+.app-shell.theme-dark .text-neutral-400,
+.app-shell.theme-dark .text-neutral-300 {
+  color: #7f90ad !important;
+}
+
+.app-shell.theme-dark .text-amber-700,
+.app-shell.theme-dark .text-amber-600 {
+  color: #f7c873 !important;
+}
+
+.app-shell.theme-dark .text-violet-700,
+.app-shell.theme-dark .text-violet-600 {
+  color: #c4b5fd !important;
+}
+
+.app-shell.theme-dark .text-blue-600 {
+  color: #93c5fd !important;
+}
+
+.app-shell.theme-dark .text-purple-600 {
+  color: #d8b4fe !important;
+}
+
+.app-shell.theme-dark .text-red-600,
+.app-shell.theme-dark .text-red-500 {
+  color: #fda4af !important;
+}
+
+.app-shell.theme-dark .text-sky-600 {
+  color: #7dd3fc !important;
+}
+
+.app-shell.theme-dark .text-emerald-600 {
+  color: #86efac !important;
+}
+
+.app-shell.theme-dark .hover\:bg-white:hover,
+.app-shell.theme-dark .hover\:bg-neutral-50:hover {
+  background-color: #1a2940 !important;
+}
+
+.app-shell.theme-dark .hover\:bg-neutral-100:hover,
+.app-shell.theme-dark .hover\:bg-neutral-200:hover {
+  background-color: #22324c !important;
+}
+
+.app-shell.theme-dark .hover\:bg-amber-50:hover,
+.app-shell.theme-dark .hover\:bg-amber-100:hover {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+}
+
+.app-shell.theme-dark .hover\:bg-violet-50:hover,
+.app-shell.theme-dark .hover\:bg-violet-100:hover {
+  background-color: rgba(139, 92, 246, 0.22) !important;
+}
+
+.app-shell.theme-dark .hover\:bg-red-50:hover,
+.app-shell.theme-dark .hover\:bg-red-100:hover {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+.app-shell.theme-dark .hover\:bg-sky-50:hover,
+.app-shell.theme-dark .hover\:bg-sky-100:hover {
+  background-color: rgba(14, 165, 233, 0.22) !important;
+}
+
+.app-shell.theme-dark .hover\:border-violet-200:hover,
+.app-shell.theme-dark .hover\:border-violet-300:hover {
+  border-color: rgba(139, 92, 246, 0.46) !important;
+}
+
+.app-shell.theme-dark .hover\:border-amber-200:hover,
+.app-shell.theme-dark .hover\:border-amber-300:hover {
+  border-color: rgba(245, 158, 11, 0.42) !important;
+}
+
+.app-shell.theme-dark .hover\:border-red-200:hover {
+  border-color: rgba(239, 68, 68, 0.42) !important;
+}
+
+.app-shell.theme-dark .hover\:border-sky-200:hover,
+.app-shell.theme-dark .hover\:border-sky-300:hover {
+  border-color: rgba(14, 165, 233, 0.46) !important;
+}
+
+.app-shell.theme-dark .hover\:text-neutral-600:hover,
+.app-shell.theme-dark .hover\:text-neutral-700:hover,
+.app-shell.theme-dark .hover\:text-neutral-800:hover,
+.app-shell.theme-dark .hover\:text-neutral-500:hover {
+  color: #f8fbff !important;
+}
+
+.app-shell.theme-dark .react-flow__controls {
+  background-color: #0f1829 !important;
+  border-color: #24344f !important;
+  box-shadow: 0 24px 64px -28px rgba(0, 0, 0, 0.7) !important;
+}
+
+.app-shell.theme-dark .react-flow__controls-button {
+  background-color: #0f1829 !important;
+  color: #b0bfd8 !important;
+  border-bottom-color: #24344f !important;
+}
+
+.app-shell.theme-dark .react-flow__controls-button:hover {
+  background-color: #162338 !important;
+  color: #f8fbff !important;
+}
+
+.app-shell.theme-dark .react-flow__background-pattern {
+  stroke: #24344f !important;
+  fill: #24344f !important;
 }
 
 /* React Flow Connection Styles - Reverted to Clean Minimal */
@@ -37,9 +321,215 @@
   display: none !important;
 }
 
+/* Reset React Flow default group styles */
+.react-flow__node-group {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  pointer-events: none !important; /* Allow selection box to pass through to pane */
+}
+
+.react-flow__node-group.selectable,
+.react-flow__node-group.selectable:focus,
+.react-flow__node-group.selectable:focus-visible,
+.react-flow__node-group.selectable.selected {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.react-flow__node-group > * {
+  pointer-events: all !important; /* Re-enable for the GroupNode content */
+}
+
+.react-flow__node-task {
+  /* Dynamic z-index is handled by code to support drag-over feedback */
+}
+
+.react-flow__node-group.selected {
+  box-shadow: none !important;
+}
+
 /* Base App Styles */
 body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom scroll areas use overlay thumbs so content width never shifts */
+.custom-scroll-area__viewport {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.custom-scroll-area__viewport::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.custom-scroll-area__thumb {
+  background: var(--overlay-scrollbar-thumb);
+  box-shadow: 0 10px 24px -18px rgba(15, 23, 42, 0.7);
+  transition: background-color 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+  will-change: transform;
+  touch-action: none;
+}
+
+.custom-scroll-area__thumb:hover {
+  background: var(--overlay-scrollbar-thumb-hover);
+}
+
+.custom-scroll-area__thumb.is-dragging.is-vertical {
+  background: var(--overlay-scrollbar-thumb-active);
+  transform: translateX(-50%) scaleX(1.08);
+}
+
+.custom-scroll-area__thumb.is-dragging.is-horizontal {
+  background: var(--overlay-scrollbar-thumb-active);
+  transform: translateY(-50%) scaleY(1.08);
+}
+
+/* Generating Plan Shimmer Animation */
+.generating-shimmer {
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 200%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.05) 10%,
+    rgba(99, 102, 241, 0.15) 25%,
+    rgba(147, 197, 253, 0.4) 40%,
+    rgba(99, 102, 241, 0.15) 55%,
+    rgba(59, 130, 246, 0.05) 70%,
+    transparent 100%
+  );
+  animation: generating-shimmer 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes generating-shimmer {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Dark mode shimmer */
+.app-shell.theme-dark .generating-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(96, 165, 250, 0.08) 10%,
+    rgba(129, 140, 248, 0.2) 25%,
+    rgba(165, 180, 252, 0.5) 40%,
+    rgba(129, 140, 248, 0.2) 55%,
+    rgba(96, 165, 250, 0.08) 70%,
+    transparent 100%
+  );
+}
+
+.streaming-preview-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(59, 130, 246, 0.35) transparent;
+}
+
+.streaming-preview-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.streaming-preview-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.streaming-preview-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.35);
+}
+
+/* Generating card entrance animation */
+.generating-entrance {
+  animation: generating-entrance 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes generating-entrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Generating complete animation */
+.generating-complete {
+  animation: generating-complete-fade 1.15s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.generating-complete::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  background: linear-gradient(
+    96deg,
+    transparent 0%,
+    rgba(34, 197, 94, 0.08) 28%,
+    rgba(34, 197, 94, 0.42) 48%,
+    rgba(110, 231, 183, 0.14) 62%,
+    transparent 100%
+  );
+  transform: translateX(-130%);
+  animation: generating-success-sweep 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes generating-success-sweep {
+  0% {
+    transform: translateX(-130%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(130%);
+    opacity: 0;
+  }
+}
+
+@keyframes generating-complete-fade {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  78% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-4px) scale(0.985);
+    opacity: 0;
+  }
 }

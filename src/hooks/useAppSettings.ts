@@ -1,12 +1,60 @@
 import { useEffect, useState } from 'react';
-
-import type { Settings } from '../types';
+import type { ApiProvider, Settings } from '../types';
 
 const STORAGE_KEY = 'orchestra-ai-settings';
 
+const DEFAULT_PROVIDERS: ApiProvider[] = [
+  {
+    id: 'minimax',
+    name: 'MiniMax',
+    type: 'minimax',
+    apiKey: '',
+    baseUrl: 'https://api.minimaxi.com/v1',
+    model: 'MiniMax-M2.7',
+    apiKeyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    type: 'openai-compatible',
+    apiKey: '',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    apiKeyUrl: 'https://platform.deepseek.com/api_keys',
+  },
+  {
+    id: 'qwen',
+    name: '通义千问',
+    type: 'openai-compatible',
+    apiKey: '',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-plus',
+    apiKeyUrl: 'https://dashscope.console.aliyun.com/apiKey',
+  },
+  {
+    id: 'doubao',
+    name: '豆包',
+    type: 'openai-compatible',
+    apiKey: '',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    model: 'doubao-1-5-pro-32k',
+    apiKeyUrl: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey',
+  },
+  {
+    id: 'zhipu',
+    name: '智谱 AI',
+    type: 'openai-compatible',
+    apiKey: '',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    model: 'glm-4-flash',
+    apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+  },
+];
+
 const DEFAULT_SETTINGS: Settings = {
   language: 'zh',
-  version: '1.2.6',
+  themeMode: 'light',
+  version: '0.3.0',
   hotkeys: {
     save: 'Ctrl+S',
     export: 'Ctrl+Alt+S',
@@ -17,8 +65,10 @@ const DEFAULT_SETTINGS: Settings = {
     paste: 'Ctrl+V',
     cut: 'Ctrl+X',
     delete: 'Delete',
-    pan: 'Space',
+    pan: '鼠标左键',
     select: 'Shift',
+    group: 'Ctrl+G',
+    ungroup: 'Shift+G',
   },
   nodePresets: [
     { id: 'planning', label: '计划', color: 'sky', type: 'planning' },
@@ -37,11 +87,34 @@ const DEFAULT_SETTINGS: Settings = {
   customVisualPresets: [null, null],
   interaction: {
     boxSelectionShortcut: 'Shift',
+    showCanvasGrid: false,
+  },
+  nodeTools: {
+    enabled: true,
+    showToolbarOnSelect: true,
+    panelWidth: 420,
+    enabledTools: {
+      table: true,
+      document: true,
+      link: true,
+      schedule: true,
+    },
+    calendar: {
+      enabled: true,
+      collapsed: false,
+      defaultView: 'month',
+      showTodayPanel: true,
+    },
+  },
+  apiConfig: {
+    activeProviderId: 'minimax',
+    providers: DEFAULT_PROVIDERS,
   },
   updateNotes: [
-    '🎨 配色槽位：预设精简为 3 个经典主题，另开放 2 个自定义存储槽位。',
-    '📊 连线视觉优化：取色器新增常用专业配色色块，快速搭建高颜值编排器。',
-    '⌨️ 交互热键统一：支持录入「鼠标左键」作为平移热键，不再区分专用开关。',
+    '✨ 节点工作台：现在每个任务节点都可以挂载文档、表格、链接和时间信息。',
+    '🤖 多模型接入：内置支持 MiniMax、DeepSeek、通义千问、豆包、智谱与 OpenAI Compatible。',
+    '🗂️ 项目记录与排期：支持本地记录、快速回载、拖拽排序，以及日历化的时间视图。',
+    '🎛️ 深度可定制：快捷键、交互方式、外观预设、连线表现和节点工具都可按习惯调整。',
   ],
 };
 
@@ -54,10 +127,42 @@ function loadSettings(): Settings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      // 强制使用最新代码中的版本号和功能介绍，不受本地缓存干扰
+      version: DEFAULT_SETTINGS.version,
+      updateNotes: DEFAULT_SETTINGS.updateNotes,
       hotkeys: { ...DEFAULT_SETTINGS.hotkeys, ...(parsed.hotkeys || {}) },
       visuals: { ...DEFAULT_SETTINGS.visuals, ...(parsed.visuals || {}) },
       customVisualPresets: parsed.customVisualPresets || [null, null],
       interaction: { ...DEFAULT_SETTINGS.interaction, ...(parsed.interaction || {}) },
+      nodeTools: {
+        ...DEFAULT_SETTINGS.nodeTools,
+        ...(parsed.nodeTools || {}),
+        enabledTools: {
+          ...DEFAULT_SETTINGS.nodeTools.enabledTools,
+          ...(parsed.nodeTools?.enabledTools || {}),
+        },
+        calendar: {
+          ...DEFAULT_SETTINGS.nodeTools.calendar,
+          ...(parsed.nodeTools?.calendar || {}),
+        },
+      },
+      apiConfig: parsed.apiConfig ? {
+        ...DEFAULT_SETTINGS.apiConfig,
+        ...parsed.apiConfig,
+        providers: (parsed.apiConfig.providers || DEFAULT_PROVIDERS).map((p: any) => {
+          const defaultProvider = DEFAULT_PROVIDERS.find(dp => dp.id === p.id);
+          return {
+            ...defaultProvider,
+            ...p,
+            // 确保即使在旧数据中，这些关键字段也使用最新的
+            apiKeyUrl: defaultProvider?.apiKeyUrl || p.apiKeyUrl
+          };
+        })
+      } : {
+        ...DEFAULT_SETTINGS.apiConfig,
+        // Migration from legacy apiKey
+        providers: DEFAULT_PROVIDERS.map(p => p.id === 'minimax' ? { ...p, apiKey: parsed.apiKey || '' } : p)
+      }
     };
   } catch (error) {
     console.error('Failed to parse settings', error);

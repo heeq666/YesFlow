@@ -1,5 +1,4 @@
 import { Node, XYPosition } from '@xyflow/react';
-import { getNodeAbsolutePosition } from './nodeUtils';
 
 export type HelperLineHorizontal = {
   y: number;
@@ -32,6 +31,31 @@ export function getHelperLines(
     horizontal: null,
     vertical: null,
   };
+  const nodeLookup = new Map(allNodes.map((node) => [node.id, node]));
+  const absolutePositionCache = new Map<string, XYPosition>();
+
+  const getAbsolutePosition = (node: Node): XYPosition => {
+    const cachedPosition = absolutePositionCache.get(node.id);
+    if (cachedPosition) return cachedPosition;
+
+    let x = node.position.x;
+    let y = node.position.y;
+    let currentParentId = node.parentId;
+    let depth = 0;
+
+    while (currentParentId && depth < 20) {
+      const parent = nodeLookup.get(currentParentId);
+      if (!parent) break;
+      x += parent.position.x;
+      y += parent.position.y;
+      currentParentId = parent.parentId;
+      depth += 1;
+    }
+
+    const absolutePosition = { x, y };
+    absolutePositionCache.set(node.id, absolutePosition);
+    return absolutePosition;
+  };
 
   // 这里假设传入的 draggedNode.position 已经是绝对坐标（在 App.tsx 中计算好）
   const draggedPos = draggedNode.position;
@@ -56,7 +80,7 @@ export function getHelperLines(
     const nodeHeight = node.measured?.height ?? 0;
     
     // 使用统一递归工具获取绝对位置
-    const absPos = getNodeAbsolutePosition(node, allNodes);
+    const absPos = getAbsolutePosition(node);
     const nodeX = absPos.x;
     const nodeY = absPos.y;
 

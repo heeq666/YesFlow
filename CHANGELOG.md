@@ -1,30 +1,50 @@
 # Changelog
 
-All notable changes to **YesFlow** will be documented in this file.
+All notable changes to **YesFlow** are documented here.
 
----
+## [0.3.0] - 2026-04-03
+
+### Added
+
+- Node tool workspace with `Document`, `Table`, `Link`, and `Schedule` support
+- Right-side utility sidebar with integrated calendar view
+- Multi-provider AI configuration for MiniMax, DeepSeek, Qwen, Doubao, Zhipu, and OpenAI-compatible endpoints
+- Local project records with auto-save, quick reopen, and drag-to-reorder
+- JSON export filename dialog and richer project file handling
+
+### Changed
+
+- Repositioned YesFlow from a flow editor into a fuller AI workflow workspace
+- Rewrote both `README.md` and `README_ZH.md` around the current product scope
+- Refreshed the in-app About section and release notes for the `0.3.0` launch
+- Expanded customization across appearance, interaction, node tools, and provider settings
+
+### Improved
+
+- Workflow editing with grouping, ungrouping, node-side tool access, and richer edge management
+- Node context depth by letting each task carry its own notes, references, schedules, and tabular data
+- Release messaging and product description consistency across docs and settings
 
 ## [0.2.0] - 2026-04-01
 
 ### Added
-- **Project renamed** — From AI Orchestra to YesFlow
-- **Enhanced logo & branding** — New visual identity
-- **Custom SVG favicon** — Branded icon for browser tab
+
+- Project renamed from `AI Orchestra` to `YesFlow`
+- Refreshed logo, branding, and browser favicon
 
 ### Changed
-- **README** — Fully rewritten with comprehensive documentation
 
----
+- Rewrote the original README around the new YesFlow identity
 
 ## [0.1.0] - 2026-03-31
 
 ### Added
-- **YesFlow** — Initial release (Beta)
-- Visual pipeline editor with drag-and-drop
-- Multi-model AI support via MiniMax API
-- Condition nodes for branching logic
-- Shift+click and Shift+drag box multi-select
-- Fully customizable hotkeys
-- Dark mode UI
-- Local-first storage (browser localStorage)
-- One-click Netlify deployment
+
+- Initial beta release of YesFlow
+- Visual drag-and-drop workflow canvas
+- AI task orchestration with model-backed nodes
+- Conditional branching and parallel workflow structure
+- Multi-select with `Shift + Click` and `Shift + Drag`
+- Customizable hotkeys
+- Local-first storage
+- Static deployment-ready frontend architecture

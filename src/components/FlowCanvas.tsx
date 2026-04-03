@@ -11,12 +11,18 @@ import {
 import type React from 'react';
 import { AnimatePresence } from 'motion/react';
 
+import GroupNode from './GroupNode';
 import SelectionBoxOverlay from './SelectionBoxOverlay';
 import TopToolbar from './TopToolbar';
 import { HelperLines } from './HelperLines';
-import { edgeTypes, nodeTypes } from '../constants/flowConfig';
+import { edgeTypes, nodeTypes as baseNodeTypes } from '../constants/flowConfig';
 import type { HelperLines as HelperLinesType } from '../utils/helperLineUtils';
-import type { NodePreset } from '../types';
+import type { ConnectionMode, NodePreset, ThemeMode } from '../types';
+
+const nodeTypes = {
+  ...baseNodeTypes,
+  group: GroupNode,
+};
 
 type FlowCanvasProps = {
   selectionBox: { x: number; y: number; width: number; height: number } | null;
@@ -25,6 +31,8 @@ type FlowCanvasProps = {
   activeEdges: Edge[];
   helperLines: HelperLinesType;
   mode: 'daily' | 'professional';
+  themeMode: ThemeMode;
+  showCanvasGrid: boolean;
   edgeColor: string;
   onMouseDown: (event: React.MouseEvent) => void;
   onNodesChange: (changes: NodeChange[]) => void;
@@ -44,6 +52,7 @@ type FlowCanvasProps = {
   onSelectionStart: () => void;
   onSelectionEnd: () => void;
   onNodeDragStart: (_: any, node: Node) => void;
+  onNodeDrag: (_: any, node: Node) => void;
   onNodeDragStop: (_: any, node: Node) => void;
   currentProjectLabel: string;
   projectName: string;
@@ -57,10 +66,15 @@ type FlowCanvasProps = {
   onOpenFile: () => void;
   defaultPathType: string;
   onApplyPathTypeToAll: (pathType: string) => void;
+  connectionMode: ConnectionMode;
+  onApplyConnectionMode: (mode: ConnectionMode) => void;
+  onToggleCanvasGrid: () => void;
   language: 'zh' | 'en';
   nodePresets: NodePreset[];
   onAddPresetNode: (preset: NodePreset) => void;
   onAddNodeLocal: () => void;
+  onToggleTheme: () => void;
+  onToggleLanguage: () => void;
 };
 
 export default function FlowCanvas({
@@ -70,6 +84,8 @@ export default function FlowCanvas({
   activeEdges,
   helperLines,
   mode,
+  themeMode,
+  showCanvasGrid,
   edgeColor,
   onMouseDown,
   onNodesChange,
@@ -89,6 +105,7 @@ export default function FlowCanvas({
   onSelectionStart,
   onSelectionEnd,
   onNodeDragStart,
+  onNodeDrag,
   onNodeDragStop,
   currentProjectLabel,
   projectName,
@@ -102,10 +119,15 @@ export default function FlowCanvas({
   onOpenFile,
   defaultPathType,
   onApplyPathTypeToAll,
+  connectionMode,
+  onApplyConnectionMode,
+  onToggleCanvasGrid,
   language,
   nodePresets,
   onAddPresetNode,
   onAddNodeLocal,
+  onToggleTheme,
+  onToggleLanguage,
 }: FlowCanvasProps) {
   return (
     <div className="absolute inset-0 w-full h-full overflow-hidden">
@@ -129,7 +151,7 @@ export default function FlowCanvas({
         snapToGrid={false}
         selectionKeyCode={selectionKeyCode}
         multiSelectionKeyCode={selectionKeyCode}
-        selectionOnDrag={false}
+        selectionOnDrag={true}
         panOnDrag={panOnDrag}
         panActivationKeyCode={panActivationKeyCode}
         selectionMode={SelectionMode.Full}
@@ -138,6 +160,7 @@ export default function FlowCanvas({
         onSelectionStart={onSelectionStart}
         onSelectionEnd={onSelectionEnd}
         onNodeDragStart={onNodeDragStart}
+        onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         isValidConnection={(connection) => connection.source !== connection.target}
         connectionLineContainerStyle={{ zIndex: -1 }}
@@ -150,7 +173,14 @@ export default function FlowCanvas({
           {/* Import Status moved to bottom-left container */}
         </AnimatePresence>
         <HelperLines horizontal={helperLines.horizontal} vertical={helperLines.vertical} />
-        <Background color="#cbd5e1" variant={mode === 'professional' ? 'dots' : 'lines'} gap={mode === 'professional' ? 24 : 40} size={1} />
+        {showCanvasGrid && (
+          <Background
+            color={themeMode === 'dark' ? '#24344f' : '#cbd5e1'}
+            variant={mode === 'professional' ? 'dots' : 'lines'}
+            gap={mode === 'professional' ? 24 : 40}
+            size={1}
+          />
+        )}
         <Controls position="bottom-right" className="!bg-white !border-neutral-200 !shadow-lg m-4" />
         <TopToolbar
           currentProjectLabel={currentProjectLabel}
@@ -165,10 +195,17 @@ export default function FlowCanvas({
           onOpenFile={onOpenFile}
           defaultPathType={defaultPathType}
           onApplyPathTypeToAll={onApplyPathTypeToAll}
+          connectionMode={connectionMode}
+          onApplyConnectionMode={onApplyConnectionMode}
+          showCanvasGrid={showCanvasGrid}
+          onToggleCanvasGrid={onToggleCanvasGrid}
+          themeMode={themeMode}
           language={language}
           nodePresets={nodePresets}
           onAddPresetNode={onAddPresetNode}
           onAddNodeLocal={onAddNodeLocal}
+          onToggleTheme={onToggleTheme}
+          onToggleLanguage={onToggleLanguage}
         />
       </ReactFlow>
     </div>

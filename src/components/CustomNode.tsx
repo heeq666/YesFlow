@@ -1,9 +1,12 @@
 import React from 'react';
-import { Handle, Position, useConnection, useStoreApi, type NodeProps } from '@xyflow/react';
-import { CheckCircle2, Circle, PlayCircle, AlertCircle, ClipboardList, Zap, ShieldCheck, Layers, Plus, Loader2, Sparkles, ExternalLink, Link as LinkIcon } from 'lucide-react';
-import { type TaskData, type NodeStatus } from '../types';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { CheckCircle2, Circle, PlayCircle, AlertCircle, ClipboardList, Zap, ShieldCheck, Layers, Plus, Loader2, Clock3, Table2, FileText, Wrench } from 'lucide-react';
+import { type TaskData, type NodeStatus, type ThemeMode } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { NodeSettingsContext } from '../contexts/NodeSettingsContext';
+import { HANDLE_DOT_SIZE, getUnifiedHandleStyle } from '../constants/handleGeometry';
+import NodeToolToolbar from './NodeToolToolbar';
+import { formatScheduleSummary } from '../utils/nodeTools';
 
 const statusIcons = {
   pending: <Circle className="w-5 h-5 text-neutral-300" />,
@@ -12,33 +15,71 @@ const statusIcons = {
   failed: <AlertCircle className="w-5 h-5 text-red-500" />,
 };
 
-const colorStyles: Record<string, { bg: string, border: string, text: string, textDark: string }> = {
-  sky: { bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-500', textDark: 'text-sky-600' },
-  green: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-500', textDark: 'text-green-600' },
-  amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-500', textDark: 'text-amber-600' },
-  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-500', textDark: 'text-indigo-600' },
-  rose: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-500', textDark: 'text-rose-600' },
-  teal: { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-500', textDark: 'text-teal-600' },
-  fuchsia: { bg: 'bg-fuchsia-50', border: 'border-fuchsia-200', text: 'text-fuchsia-500', textDark: 'text-fuchsia-600' },
-  orange: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-500', textDark: 'text-orange-600' },
-  cyan: { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-500', textDark: 'text-cyan-600' },
-  violet: { bg: 'bg-violet-50', border: 'border-violet-200', text: 'text-violet-500', textDark: 'text-violet-600' },
+type ToneStyle = { bg: string; border: string; text: string; textDark: string };
+
+const colorStyles: Record<string, Record<ThemeMode, ToneStyle>> = {
+  sky: {
+    light: { bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-500', textDark: 'text-sky-600' },
+    dark: { bg: 'bg-sky-950/55', border: 'border-sky-800/70', text: 'text-sky-300', textDark: 'text-sky-200' },
+  },
+  green: {
+    light: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-500', textDark: 'text-green-600' },
+    dark: { bg: 'bg-green-950/55', border: 'border-green-800/70', text: 'text-green-300', textDark: 'text-green-200' },
+  },
+  amber: {
+    light: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-500', textDark: 'text-amber-600' },
+    dark: { bg: 'bg-amber-950/55', border: 'border-amber-800/70', text: 'text-amber-300', textDark: 'text-amber-200' },
+  },
+  indigo: {
+    light: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-500', textDark: 'text-indigo-600' },
+    dark: { bg: 'bg-indigo-950/55', border: 'border-indigo-800/70', text: 'text-indigo-300', textDark: 'text-indigo-200' },
+  },
+  rose: {
+    light: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-500', textDark: 'text-rose-600' },
+    dark: { bg: 'bg-rose-950/55', border: 'border-rose-800/70', text: 'text-rose-300', textDark: 'text-rose-200' },
+  },
+  teal: {
+    light: { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-500', textDark: 'text-teal-600' },
+    dark: { bg: 'bg-teal-950/55', border: 'border-teal-800/70', text: 'text-teal-300', textDark: 'text-teal-200' },
+  },
+  fuchsia: {
+    light: { bg: 'bg-fuchsia-50', border: 'border-fuchsia-200', text: 'text-fuchsia-500', textDark: 'text-fuchsia-600' },
+    dark: { bg: 'bg-fuchsia-950/55', border: 'border-fuchsia-800/70', text: 'text-fuchsia-300', textDark: 'text-fuchsia-200' },
+  },
+  orange: {
+    light: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-500', textDark: 'text-orange-600' },
+    dark: { bg: 'bg-orange-950/55', border: 'border-orange-800/70', text: 'text-orange-300', textDark: 'text-orange-200' },
+  },
+  cyan: {
+    light: { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-500', textDark: 'text-cyan-600' },
+    dark: { bg: 'bg-cyan-950/55', border: 'border-cyan-800/70', text: 'text-cyan-300', textDark: 'text-cyan-200' },
+  },
+  violet: {
+    light: { bg: 'bg-violet-50', border: 'border-violet-200', text: 'text-violet-500', textDark: 'text-violet-600' },
+    dark: { bg: 'bg-violet-950/55', border: 'border-violet-800/70', text: 'text-violet-300', textDark: 'text-violet-200' },
+  },
 };
 
-const getStyles = (type: string, color?: string) => {
+const getStyles = (type: string, themeMode: ThemeMode, color?: string) => {
   if (color && colorStyles[color]) {
-    return `${colorStyles[color].border} ${colorStyles[color].bg}`;
+    return `${colorStyles[color][themeMode].border} ${colorStyles[color][themeMode].bg}`;
   }
   const t = type.toLowerCase();
+  if (themeMode === 'dark') {
+    if (t === 'planning' || t === '规划') return 'border-sky-800/70 bg-sky-950/55';
+    if (t === 'execution' || t === '执行') return 'border-green-800/70 bg-green-950/55';
+    if (t === 'verification' || t === '验证') return 'border-amber-800/70 bg-amber-950/55';
+    return 'border-indigo-800/70 bg-indigo-950/55';
+  }
   if (t === 'planning' || t === '规划') return 'border-sky-200 bg-sky-50';
   if (t === 'execution' || t === '执行') return 'border-green-200 bg-green-50';
   if (t === 'verification' || t === '验证') return 'border-amber-200 bg-amber-50';
   return 'border-indigo-200 bg-indigo-50';
 };
 
-const getIcon = (type: string, color?: string) => {
+const getIcon = (type: string, themeMode: ThemeMode, color?: string) => {
   if (color && colorStyles[color]) {
-    return <Layers className={`w-4 h-4 ${colorStyles[color].text}`} />;
+    return <Layers className={`w-4 h-4 ${colorStyles[color][themeMode].text}`} />;
   }
   const t = type.toLowerCase();
   if (t === 'planning' || t === '规划') return <ClipboardList className="w-4 h-4 text-sky-500" />;
@@ -60,25 +101,20 @@ const getDisplayType = (type: string, lang: 'zh' | 'en', typeLabel?: string) => 
 
 export default function CustomNode({ id, data, selected = false }: NodeProps & { data: TaskData }) {
   const context = React.useContext(NodeSettingsContext);
-  const store = useStoreApi();
+  const themeMode = context.themeMode;
   const [isEditing, setIsEditing] = React.useState(false);
   const [editLabel, setEditLabel] = React.useState(data.label);
   const [editDesc, setEditDesc] = React.useState(data.description);
   const [editType, setEditType] = React.useState(data.type);
   const [editTypeLabel, setEditTypeLabel] = React.useState('');
   const [editCategory, setEditCategory] = React.useState(data.category || '');
+  const [showToolbar, setShowToolbar] = React.useState(false);
   const titleRef = React.useRef<HTMLInputElement>(null);
   const editContainerRef = React.useRef<HTMLDivElement>(null);
-  const [isLinksOpen, setIsLinksOpen] = React.useState(false);
-
-  const links = React.useMemo(() => {
-    const combinedText = `${data.label} ${data.description}`;
-    const matches = combinedText.match(/https?:\/\/[^\s]+/g);
-    return matches ? Array.from(new Set(matches)) : [];
-  }, [data.label, data.description]);
 
   const lang = data.language || 'zh';
   const displayType = getDisplayType(data.type, lang, data.typeLabel);
+  const activeColorStyle = data.color && colorStyles[data.color] ? colorStyles[data.color][themeMode] : null;
 
   const toggleStatus = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -142,24 +178,55 @@ export default function CustomNode({ id, data, selected = false }: NodeProps & {
     }
   };
 
-  const [isHovered, setIsHovered] = React.useState(false);
-  const connection = useConnection();
-  const isTargetNode = connection.inProgress && isHovered && connection.fromNode?.id !== id;
   const showSelection = selected;
+  const handleVisibilityClass = `${showSelection ? 'opacity-100 scale-100' : 'opacity-0 scale-75'} transition-all duration-200`;
+  const scheduleSummary = formatScheduleSummary(data.tools?.schedule, lang);
+  const hasTable = Boolean(data.tools?.table?.enabled);
+  const hasDocument = Boolean(data.tools?.document?.enabled);
+  const hasEnabledNodeTools = Object.values(context.nodeTools.enabledTools || {}).some(Boolean);
+  const renderSourceHandleDot = () => (
+    <span
+      className={`rounded-full border-2 border-white shadow-sm shrink-0 ${handleVisibilityClass}`}
+      style={{
+        width: HANDLE_DOT_SIZE,
+        height: HANDLE_DOT_SIZE,
+        boxSizing: 'border-box',
+        backgroundColor: context.visuals.handleColor,
+      }}
+    />
+  );
 
   return (
     <motion.div
       initial={{ scale: 0.9, opacity: 0 }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       animate={{ 
         scale: data.isAiProcessing ? 1.02 : 1, 
         opacity: 1,
         borderColor: data.isAiProcessing ? '#8b5cf6' : undefined
       }}
       onDoubleClick={handleDoubleClick}
-      className={`relative group border-2 transition-[border-color,opacity,background-color,box-shadow] duration-200 w-[260px] h-[140px] rounded-xl ${getStyles(isEditing ? editType : data.type, data.color)} ${data.status === 'completed' && context.completedStyle === 'classic' ? 'opacity-75 grayscale-[0.2]' : ''}`}
+      className={`relative group border-2 transition-[border-color,opacity,background-color,box-shadow] duration-200 w-[260px] h-[132px] rounded-xl ${getStyles(isEditing ? editType : data.type, themeMode, data.color)} ${data.status === 'completed' && context.completedStyle === 'classic' ? 'opacity-75 grayscale-[0.2]' : ''}`}
     >
+      <NodeToolToolbar id={id} data={data} selected={selected} visible={showToolbar} onClose={() => setShowToolbar(false)} />
+
+      {/* Join Group Bubble (Appears above the dragged node) */}
+      <AnimatePresence>
+        {data.isDraggingOver && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 10, x: '-50%' }}
+            className="absolute -top-[52px] left-1/2 flex items-center gap-1.5 bg-primary text-white px-3 py-2 rounded-xl shadow-[0_8px_32px_rgba(37,99,235,0.4)] z-[1000] whitespace-nowrap"
+          >
+            <div className="absolute left-[calc(50%-0.5px)] -translate-x-1/2 -bottom-[6px] w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-primary" />
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+            <span className="text-[10px] font-black uppercase tracking-wider relative -top-[0.5px]">
+              {lang === 'zh' ? '加入该组' : 'Join Group'}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 2px Unified Highlight Overlay (No Blur, No Flicker) */}
       <AnimatePresence>
         {showSelection && (
@@ -179,39 +246,43 @@ export default function CustomNode({ id, data, selected = false }: NodeProps & {
       */}
       
       <Handle type="target" position={Position.Top} id="top-target" 
-        style={{ top: 0, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, background: 'transparent', border: 'none', zIndex: 50 }} />
+        className="pointer-events-auto opacity-0"
+        style={{ ...getUnifiedHandleStyle(Position.Top), zIndex: 100 }} />
       <Handle type="source" position={Position.Top} id="top-source" 
-        className={`${!showSelection ? 'opacity-0' : 'opacity-100 cursor-crosshair'} pointer-events-auto transition-opacity duration-200`}
-        style={{ top: 0, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, background: 'transparent', border: 'none', zIndex: 51 }}>
-        <div className="w-4 h-4 -mt-2 border-2 border-white rounded-full shadow-sm" style={{ backgroundColor: context.visuals.handleColor }} />
+        className="pointer-events-auto cursor-crosshair"
+        style={{ ...getUnifiedHandleStyle(Position.Top), zIndex: 101 }}>
+        {renderSourceHandleDot()}
       </Handle>
-
+ 
       <Handle type="target" position={Position.Bottom} id="bottom-target" 
-        style={{ bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, background: 'transparent', border: 'none', zIndex: 50 }} />
+        className="pointer-events-auto opacity-0"
+        style={{ ...getUnifiedHandleStyle(Position.Bottom), zIndex: 100 }} />
       <Handle type="source" position={Position.Bottom} id="bottom-source" 
-        className={`${!showSelection ? 'opacity-0' : 'opacity-100 cursor-crosshair'} pointer-events-auto transition-opacity duration-200`}
-        style={{ bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, background: 'transparent', border: 'none', zIndex: 51 }}>
-        <div className="w-4 h-4 mt-2 border-2 border-white rounded-full shadow-sm" style={{ backgroundColor: context.visuals.handleColor }} />
+        className="pointer-events-auto cursor-crosshair"
+        style={{ ...getUnifiedHandleStyle(Position.Bottom), zIndex: 101 }}>
+        {renderSourceHandleDot()}
       </Handle>
-
+ 
       <Handle type="target" position={Position.Left} id="left-target" 
-        style={{ left: 0, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, background: 'transparent', border: 'none', zIndex: 50 }} />
+        className="pointer-events-auto opacity-0"
+        style={{ ...getUnifiedHandleStyle(Position.Left), zIndex: 100 }} />
       <Handle type="source" position={Position.Left} id="left-source" 
-        className={`${!showSelection ? 'opacity-0' : 'opacity-100 cursor-crosshair'} pointer-events-auto transition-opacity duration-200`}
-        style={{ left: 0, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, background: 'transparent', border: 'none', zIndex: 51 }}>
-        <div className="w-4 h-4 -ml-2 border-2 border-white rounded-full shadow-sm" style={{ backgroundColor: context.visuals.handleColor }} />
+        className="pointer-events-auto cursor-crosshair"
+        style={{ ...getUnifiedHandleStyle(Position.Left), zIndex: 101 }}>
+        {renderSourceHandleDot()}
       </Handle>
-
+ 
       <Handle type="target" position={Position.Right} id="right-target" 
-        style={{ right: 0, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, background: 'transparent', border: 'none', zIndex: 50 }} />
+        className="pointer-events-auto opacity-0"
+        style={{ ...getUnifiedHandleStyle(Position.Right), zIndex: 100 }} />
       <Handle type="source" position={Position.Right} id="right-source" 
-        className={`${!showSelection ? 'opacity-0' : 'opacity-100 cursor-crosshair'} pointer-events-auto transition-opacity duration-200`}
-        style={{ right: 0, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, background: 'transparent', border: 'none', zIndex: 51 }}>
-        <div className="w-4 h-4 ml-2 border-2 border-white rounded-full shadow-sm" style={{ backgroundColor: context.visuals.handleColor }} />
+        className="pointer-events-auto cursor-crosshair"
+        style={{ ...getUnifiedHandleStyle(Position.Right), zIndex: 101 }}>
+        {renderSourceHandleDot()}
       </Handle>
       
       {/* Content Wrapper with overflow-hidden to clip internal effects */}
-      <div className="w-full h-full rounded-[10px] overflow-hidden relative px-4 py-3">
+      <div className="w-full h-full rounded-[10px] overflow-hidden relative px-4 py-2.5">
         {/* AI Processing Shiny Effect */}
         {data.isAiProcessing && (
           <motion.div
@@ -235,12 +306,12 @@ export default function CustomNode({ id, data, selected = false }: NodeProps & {
         
         <div 
           ref={isEditing ? editContainerRef : null} 
-          className="flex flex-col h-full gap-2 relative z-10" 
+          className="flex flex-col h-full gap-1.5 relative z-10" 
           onClick={isEditing ? (e) => e.stopPropagation() : undefined}
         >
           {/* Header: Icon + Type Label */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="relative">
+            <div className="flex items-center gap-2 pr-[116px]">
               <div 
                 onClick={(e) => {
                   if (!selected) return;
@@ -267,11 +338,12 @@ export default function CustomNode({ id, data, selected = false }: NodeProps & {
                 {data.isAiProcessing ? (
                   <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
                 ) : (
-                  getIcon(isEditing ? editType : data.type, data.color)
+                  getIcon(isEditing ? editType : data.type, themeMode, data.color)
                 )}
               </div>
               <div className="flex items-center min-w-0 h-4">
                 {isEditing ? (
+                  <div className="min-w-0">
                   <input
                     value={editTypeLabel || getDisplayType(editType, lang)}
                     onChange={(e) => setEditTypeLabel(e.target.value)}
@@ -280,6 +352,7 @@ export default function CustomNode({ id, data, selected = false }: NodeProps & {
                     style={{ fontFamily: 'inherit' }}
                     className="text-[11px] bg-transparent outline-none p-0 m-0 nodrag nowheel font-bold uppercase tracking-wider text-neutral-500 border-none w-full leading-4 h-4 flex items-center"
                   />
+                  </div>
                 ) : (
                   <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 truncate max-w-[120px] leading-4 h-4 flex items-center">
                     {editTypeLabel || displayType}
@@ -287,24 +360,84 @@ export default function CustomNode({ id, data, selected = false }: NodeProps & {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-               {selected && (
-                 <button 
-                   onClick={(e) => { e.stopPropagation(); data.onAddNode?.(e as any, id, 'bottom'); }} 
-                   className="hover:scale-110 active:scale-95 transition-all cursor-pointer p-1 -m-1 text-neutral-400 hover:text-primary group/plus"
-                   title={lang === 'zh' ? '添加子节点' : 'Add child node'}
-                 >
-                   <Plus className="w-5 h-5 group-hover/plus:rotate-90 transition-transform duration-300" />
-                 </button>
-               )}
-               <button onClick={toggleStatus} className="hover:scale-110 transition-transform cursor-pointer">
-                 {statusIcons[data.status]}
-               </button>
-            </div>
+            <motion.div
+              initial={false}
+              animate={{ width: selected ? 112 : 32 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.78 }}
+              className="absolute right-0 top-0 flex items-center justify-end shrink-0 h-8"
+            >
+              <motion.button
+                initial={false}
+                animate={{
+                  opacity: selected ? 1 : 0,
+                  scale: selected ? 1 : 0.45,
+                  rotate: selected ? 0 : -90,
+                  filter: selected ? 'blur(0px)' : 'blur(4px)',
+                }}
+                transition={{ type: 'spring', stiffness: 460, damping: 30, mass: 0.74 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!hasEnabledNodeTools) return;
+                  setShowToolbar((v) => !v);
+                }}
+                className={`absolute right-[72px] z-[5] h-8 w-8 rounded-full shadow-[0_10px_24px_-12px_rgba(15,23,42,0.35)] backdrop-blur-sm transition-colors flex items-center justify-center ${
+                  themeMode === 'dark'
+                    ? `border border-white/10 bg-[#15243a]/92 ${
+                        hasEnabledNodeTools ? 'hover:bg-[#1b2f4c] cursor-pointer' : 'cursor-not-allowed opacity-60'
+                      } ${showToolbar ? 'text-primary shadow-[0_10px_24px_-12px_rgba(37,99,235,0.55)]' : 'text-slate-300'}`
+                    : `ring-1 ring-black/10 bg-white/92 ${
+                        hasEnabledNodeTools ? 'hover:bg-white cursor-pointer' : 'cursor-not-allowed opacity-60'
+                      } ${showToolbar ? 'text-primary ring-primary/20' : 'text-neutral-500'}`
+                }`}
+                style={{ pointerEvents: selected ? 'auto' : 'none' }}
+                title={
+                  hasEnabledNodeTools
+                    ? (lang === 'zh' ? '工具' : 'Tools')
+                    : (lang === 'zh' ? '请先在设置中启用至少一个工具' : 'Enable at least one tool in settings')
+                }
+              >
+                <Wrench className="w-3.5 h-3.5" />
+              </motion.button>
+
+              <motion.button
+                initial={false}
+                animate={{
+                  opacity: selected ? 1 : 0,
+                  scale: selected ? 1 : 0.45,
+                  rotate: selected ? 0 : -90,
+                  filter: selected ? 'blur(0px)' : 'blur(4px)',
+                }}
+                transition={{ type: 'spring', stiffness: 460, damping: 30, mass: 0.74 }}
+                onClick={(e) => { e.stopPropagation(); data.onAddNode?.(e as any, id, 'bottom'); }}
+                className={`absolute right-[36px] z-[5] h-8 w-8 rounded-full text-primary shadow-[0_10px_24px_-12px_rgba(37,99,235,0.65)] backdrop-blur-sm transition-colors flex items-center justify-center cursor-pointer ${
+                  themeMode === 'dark'
+                    ? 'border border-primary/25 bg-[#15243a]/92 hover:bg-[#1b2f4c]'
+                    : 'bg-white/92 ring-1 ring-primary/15 hover:bg-white'
+                }`}
+                style={{ pointerEvents: selected ? 'auto' : 'none' }}
+                title={lang === 'zh' ? '添加子节点' : 'Add child node'}
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </motion.button>
+
+              <motion.button
+                initial={false}
+                onClick={toggleStatus}
+                whileTap={{ scale: 0.94 }}
+                className={`relative z-10 h-8 w-8 rounded-full shadow-sm backdrop-blur-sm flex items-center justify-center cursor-pointer hover:shadow-md transition-shadow ${
+                  themeMode === 'dark'
+                    ? 'border border-white/10 bg-[#15243a]/88'
+                    : 'ring-1 ring-black/5 bg-white/88'
+                }`}
+                title={lang === 'zh' ? '切换状态' : 'Toggle status'}
+              >
+                {statusIcons[data.status]}
+              </motion.button>
+            </motion.div>
           </div>
 
           {/* Content: Title + Description */}
-          <div className="mt-1 flex-grow overflow-hidden">
+          <div className="flex-grow overflow-hidden">
             {isEditing ? (
               <div className="flex flex-col gap-1">
                 <input
@@ -340,82 +473,85 @@ export default function CustomNode({ id, data, selected = false }: NodeProps & {
           </div>
 
           {/* Footer: Module (Category) section - Only show if editing or has value */}
-          {(isEditing || data.category) && (
-            <div className="flex items-center gap-1.5 mt-auto pb-1 h-4">
-              <Layers className={`w-3 h-3 ${data.color && colorStyles[data.color] ? colorStyles[data.color].text : 'text-neutral-400'}`} />
-              <div className="flex-1 min-w-0 h-4 flex items-center">
-                {isEditing ? (
-                  <input
-                    value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value)}
-                    onBlur={handleBlur}
-                    onKeyDown={handleKeyDown}
-                    placeholder={lang === 'zh' ? '所属模块...' : 'Module...'}
-                    style={{ fontFamily: 'inherit' }}
-                    className="text-[10px] bg-transparent outline-none p-0 m-0 nodrag nowheel font-bold uppercase tracking-wider text-neutral-400 border-none w-full leading-4 h-4 flex items-center"
-                  />
-                ) : (
-                  <span className={`text-[10px] font-bold uppercase tracking-wider truncate select-none leading-4 h-4 flex items-center ${data.color && colorStyles[data.color] ? colorStyles[data.color].textDark : 'text-neutral-400'}`}>
-                    {data.category}
-                  </span>
+          {(isEditing || data.category || scheduleSummary || hasTable || hasDocument) && (
+            <div className="mt-auto flex items-center gap-1.5 pb-1 h-5">
+              {(isEditing || data.category) ? (
+                <div className="flex-1 min-w-0 h-5 flex items-center">
+                    {isEditing ? (
+                      <div
+                        className={`inline-flex h-5 min-w-0 max-w-full items-center rounded-full border px-2.5 shadow-[0_6px_16px_-10px_rgba(15,23,42,0.45)] ring-1 backdrop-blur-sm ${
+                          activeColorStyle
+                            ? `${activeColorStyle.bg} ${activeColorStyle.border} ring-white/35`
+                            : themeMode === 'dark'
+                              ? 'border-white/15 bg-white/12 ring-white/10'
+                              : 'border-black/5 bg-white/90 ring-white/80'
+                        }`}
+                      >
+                        <input
+                          value={editCategory}
+                          onChange={(e) => setEditCategory(e.target.value)}
+                          onBlur={handleBlur}
+                          onKeyDown={handleKeyDown}
+                          placeholder={lang === 'zh' ? '所属模块...' : 'Module...'}
+                          style={{ fontFamily: 'inherit' }}
+                          className={`text-[10px] bg-transparent outline-none p-0 m-0 nodrag nowheel font-black tracking-[0.12em] border-none w-full leading-5 h-5 flex items-center ${
+                            activeColorStyle ? activeColorStyle.textDark : themeMode === 'dark' ? 'text-neutral-100' : 'text-neutral-600'
+                          }`}
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => e.stopPropagation()}
+                        className={`inline-flex h-5 min-w-0 max-w-full items-center rounded-full border px-2.5 text-[10px] font-black tracking-[0.12em] shadow-[0_6px_16px_-10px_rgba(15,23,42,0.45)] ring-1 backdrop-blur-sm ${
+                          activeColorStyle
+                            ? `${activeColorStyle.bg} ${activeColorStyle.border} ${activeColorStyle.textDark} ring-white/35`
+                            : themeMode === 'dark'
+                              ? 'border-white/15 bg-white/12 text-neutral-100 ring-white/10'
+                              : 'border-black/5 bg-white/90 text-neutral-600 ring-white/80'
+                        }`}
+                      >
+                        <span className="truncate">{data.category}</span>
+                      </button>
+                    )}
+                  </div>
+              ) : (
+                <div className="flex-1" />
+              )}
+              <div className="flex items-center gap-1 shrink-0">
+                {scheduleSummary && (
+                  <div className={`inline-flex h-4 items-center gap-0.5 rounded-full px-1.5 text-[8px] font-bold shadow-sm backdrop-blur-sm ${
+                    themeMode === 'dark'
+                      ? 'border border-white/10 bg-[#15243a]/82 text-slate-300'
+                      : 'bg-white/75 text-neutral-500 ring-1 ring-black/5'
+                  }`}>
+                    <Clock3 className="w-2.5 h-2.5" />
+                    <span>{scheduleSummary}</span>
+                  </div>
+                )}
+                {hasTable && (
+                  <div className={`flex h-4 w-4 items-center justify-center rounded-full ${
+                    themeMode === 'dark'
+                      ? 'border border-white/10 bg-[#15243a]/78 text-slate-300'
+                      : 'bg-white/70 text-neutral-500 ring-1 ring-black/5'
+                  }`} title={lang === 'zh' ? '表格' : 'Table'}>
+                    <Table2 className="w-2.5 h-2.5" />
+                  </div>
+                )}
+                {hasDocument && (
+                  <div className={`flex h-4 w-4 items-center justify-center rounded-full ${
+                    themeMode === 'dark'
+                      ? 'border border-white/10 bg-[#15243a]/78 text-slate-300'
+                      : 'bg-white/70 text-neutral-500 ring-1 ring-black/5'
+                  }`} title={lang === 'zh' ? '文档' : 'Document'}>
+                    <FileText className="w-2.5 h-2.5" />
+                  </div>
                 )}
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* External Links Button - Moved outside overflow-hidden wrapper to prevent clipping */}
-      {!isEditing && links.length > 0 && (
-        <div 
-          className="absolute bottom-3 right-4 flex flex-col items-end gap-2 z-[60]"
-          onMouseLeave={() => setIsLinksOpen(false)}
-        >
-           <AnimatePresence>
-             {isLinksOpen && links.length > 1 && (
-               <motion.div
-                 initial={{ opacity: 0, y: 10, scale: 0.9 }}
-                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                 exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                 className="bg-white/90 backdrop-blur-xl border border-neutral-200 rounded-2xl shadow-2xl p-2 min-w-[180px] mb-1 overflow-hidden"
-               >
-                 <div className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-2 py-1 mb-1 border-b border-neutral-100">{lang === 'zh' ? '选择访问链接' : 'Select Link'}</div>
-                 <div className="max-h-[120px] overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
-                   {links.map((link, i) => (
-                     <button
-                       key={i}
-                       onClick={(e) => { e.stopPropagation(); window.open(link, '_blank'); setIsLinksOpen(false); }}
-                       className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-primary/5 hover:text-primary transition-all flex items-center gap-2 group/item"
-                     >
-                       <LinkIcon className="w-3 h-3 shrink-0 opacity-40 group-hover/item:opacity-100" />
-                       <span className="text-[10px] font-bold truncate flex-1">{link.replace(/^https?:\/\/(www\.)?/, '')}</span>
-                     </button>
-                   ))}
-                 </div>
-               </motion.div>
-             )}
-           </AnimatePresence>
-
-           <motion.button
-             whileHover={{ scale: 1.1 }}
-             whileTap={{ scale: 0.9 }}
-             onClick={(e) => {
-                e.stopPropagation();
-                if (links.length === 1) {
-                  window.open(links[0], '_blank');
-                } else {
-                  setIsLinksOpen(!isLinksOpen);
-                }
-             }}
-             onMouseEnter={() => links.length > 1 && setIsLinksOpen(true)}
-             className={`p-2 rounded-full shadow-lg border transition-all flex items-center justify-center ${isLinksOpen ? 'bg-primary border-primary text-white' : 'bg-white/80 backdrop-blur-md border-neutral-200 text-neutral-500 hover:text-primary hover:border-primary/30'}`}
-             title={links.length === 1 ? (lang === 'zh' ? '访问链接' : 'Visit Link') : (lang === 'zh' ? '查看链接列表' : 'View Links')}
-           >
-             <ExternalLink className="w-3.5 h-3.5" />
-             {links.length > 1 && <span className="absolute -top-1 -right-1 bg-primary text-white text-[8px] w-4 h-4 rounded-full border-2 border-white flex items-center justify-center font-bold">{links.length}</span>}
-           </motion.button>
-        </div>
-      )}
     </motion.div>
   );
 }

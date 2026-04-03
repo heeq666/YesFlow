@@ -43,7 +43,7 @@ export function useEdgeHighlighting({
         ...edge.data,
         isHighlighted: highlightedEdgeIds.has(edge.id),
         activeColor: edgeSelectedColor,
-        idleColor: edgeColor,
+        globalColor: edgeColor,
       },
     }));
   }, [nodes, edges, edgeColor, edgeSelectedColor]);

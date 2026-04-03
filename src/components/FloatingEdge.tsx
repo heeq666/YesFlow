@@ -1,5 +1,4 @@
 import { 
-  useInternalNode, 
   getBezierPath, 
   getStraightPath,
   getSmoothStepPath,
@@ -7,8 +6,9 @@ import {
   BaseEdge, 
   EdgeLabelRenderer 
 } from '@xyflow/react';
-import { getEdgeParams } from '../utils/edgeUtils';
+import { useInternalNode } from '@xyflow/react';
 import { TaskData } from '../types';
+import { getEdgeParams } from '../utils/edgeUtils';
 
 const COLOR_SWATCHES: Record<string, string> = {
   sky: '#0ea5e9',
@@ -23,21 +23,30 @@ const COLOR_SWATCHES: Record<string, string> = {
   violet: '#8b5cf6'
 };
 
-export default function FloatingEdge({
-  id,
-  source,
-  target,
-  markerEnd,
-  style = {},
-  selected,
-  animated,
-  label,
-  labelStyle,
-  labelBgStyle,
-  labelBgPadding,
-  labelBgBorderRadius,
-  data,
-}: EdgeProps) {
+export default function FloatingEdge(props: EdgeProps) {
+  const {
+    id,
+    source,
+    target,
+    markerEnd,
+    style = {},
+    selected,
+    animated,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    sourceHandleId,
+    targetPosition,
+    targetHandleId,
+    label,
+    labelStyle,
+    labelBgStyle,
+    labelBgPadding,
+    labelBgBorderRadius,
+    data,
+  } = props;
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
 
@@ -45,21 +54,28 @@ export default function FloatingEdge({
     return null;
   }
 
-  const { sx, sy, tx, ty, sourcePos, targetPos } = getEdgeParams(
-    sourceNode,
-    targetNode
-  );
-
-  const pathParams = {
-    sourceX: sx,
-    sourceY: sy,
-    sourcePosition: sourcePos,
-    targetX: tx,
-    targetY: ty,
-    targetPosition: targetPos,
-  };
-
-  const pathType = (data?.pathType as string) || 'bezier';
+  const edgeData = data as any;
+  const pathType = (edgeData?.pathType as string) || 'bezier';
+  const connectionMode = edgeData?.connectionMode === 'fixed' ? 'fixed' : 'auto';
+  const shouldAutoSwitch = connectionMode === 'auto' || (!sourceHandleId && !targetHandleId);
+  const autoParams = shouldAutoSwitch ? getEdgeParams(sourceNode, targetNode) : null;
+  const pathParams = autoParams
+    ? {
+        sourceX: autoParams.sx,
+        sourceY: autoParams.sy,
+        sourcePosition: autoParams.sourcePos,
+        targetX: autoParams.tx,
+        targetY: autoParams.ty,
+        targetPosition: autoParams.targetPos,
+      }
+    : {
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+      };
   
   let edgePath = '';
   let labelX = 0;
@@ -75,12 +91,13 @@ export default function FloatingEdge({
 
   const sourceData = sourceNode.data as TaskData;
   const sourceColor = sourceData.color ? COLOR_SWATCHES[sourceData.color] || sourceData.color : '#94a3b8';
-  // Use edge explicit color if provided, otherwise fallback to source node color
-  const edgeData = data as any;
-  const edgeColor = edgeData?.color ? (COLOR_SWATCHES[edgeData.color] || edgeData.color) : sourceColor;
+  
+  // Use edge explicit color if provided, otherwise fallback to global config or source node color
+  const customColor = (edgeData?.color && edgeData.color !== 'neutral') ? (COLOR_SWATCHES[edgeData.color] || edgeData.color) : null;
+  
   const isHighlighted = edgeData?.isHighlighted || selected;
   const activeColor = edgeData?.activeColor || '#8b5cf6';
-  const idleColor = edgeData?.idleColor || edgeColor;
+  const idleColor = customColor || edgeData?.globalColor || sourceColor;
   const finalColor = isHighlighted ? activeColor : idleColor;
 
   const finalMarkerEnd = (markerEnd && typeof markerEnd === 'object') 

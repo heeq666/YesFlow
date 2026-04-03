@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 
 import { decomposeTask, generateGroupTasks, generatePlan, modifySelectedTasks, suggestModifications } from '../services/aiService';
 import { getLayoutedElements } from '../lib/flowLayout';
-import type { AIProjectPlan, TaskData, TaskMode } from '../types';
+import type { AIProjectPlan, ConnectionMode, TaskData, TaskMode, ApiProvider } from '../types';
 
 type UseAiOrchestrationParams = {
   nodes: Node[];
@@ -13,8 +13,9 @@ type UseAiOrchestrationParams = {
   projectName: string;
   language: 'zh' | 'en';
   mode: TaskMode;
-  apiKey?: string;
+  provider: ApiProvider;
   defaultPathType: string;
+  connectionMode: ConnectionMode;
   prompt: string;
   selectedPrompt: string;
   decomposePrompt: string;
@@ -23,11 +24,11 @@ type UseAiOrchestrationParams = {
   setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
   setProjectName: (name: string) => void;
   setSuggestion: (value: string | null) => void;
-  setShowStartDialog: (value: boolean) => void;
   setShowDecomposeInput: (value: boolean) => void;
   takeSnapshot: (nodes?: Node[], edges?: Edge[]) => void;
   showStatus: (text: string, icon: React.ReactNode) => void;
   hydrateTaskData: (data: Partial<TaskData>) => TaskData;
+  onStreamingChange?: (content: string) => void;
 };
 
 export function useAiOrchestration({
@@ -36,8 +37,9 @@ export function useAiOrchestration({
   projectName,
   language,
   mode,
-  apiKey,
+  provider,
   defaultPathType,
+  connectionMode,
   prompt,
   selectedPrompt,
   decomposePrompt,
@@ -46,11 +48,11 @@ export function useAiOrchestration({
   setEdges,
   setProjectName,
   setSuggestion,
-  setShowStartDialog,
   setShowDecomposeInput,
   takeSnapshot,
   showStatus,
   hydrateTaskData,
+  onStreamingChange,
 }: UseAiOrchestrationParams) {
   const [isLoading, setIsLoading] = useState(false);
   const [isNodeAiLoading, setIsNodeAiLoading] = useState(false);
@@ -72,17 +74,18 @@ export function useAiOrchestration({
 
   const applyPlan = useCallback((plan: AIProjectPlan) => {
     const allEdges: Edge[] = [];
-    plan.nodes.forEach((node) => {
-      node.dependencies.forEach((dependency) => {
+    const edgeTimestamp = Date.now();
+    plan.nodes.forEach((node, nodeIndex) => {
+      node.dependencies.forEach((dependency, depIndex) => {
         allEdges.push({
-          id: `edge-${dependency.id}-${node.id}`,
+          id: `edge-${edgeTimestamp}-${nodeIndex}-${depIndex}`,
           source: dependency.id,
           target: node.id,
           type: 'floating',
           label: dependency.label,
           animated: true,
           markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
-          data: { pathType: defaultPathType },
+          data: { pathType: defaultPathType, connectionMode },
         });
       });
     });
@@ -107,7 +110,7 @@ export function useAiOrchestration({
     setNodes(layoutedNodes as Node[]);
     setEdges(layoutedEdges);
     takeSnapshot(layoutedNodes as Node[], layoutedEdges);
-  }, [defaultPathType, nodes, hydrateTaskData, setNodes, setEdges, takeSnapshot]);
+  }, [defaultPathType, connectionMode, nodes, hydrateTaskData, setNodes, setEdges, takeSnapshot]);
 
   const handleAbort = useCallback(() => {
     if (!abortControllerRef.current) return;
@@ -129,18 +132,19 @@ export function useAiOrchestration({
     abortControllerRef.current = controller;
 
     try {
-      const plan = await generatePlan(prompt, apiKey, language, mode, controller.signal);
+      const plan = await generatePlan(prompt, provider, language, mode, controller.signal, onStreamingChange);
       const allEdges: Edge[] = [];
-      plan.nodes.forEach((node) => node.dependencies.forEach((dependency) => {
+      const edgeTimestamp = Date.now();
+      plan.nodes.forEach((node, nodeIndex) => node.dependencies.forEach((dependency, depIndex) => {
         allEdges.push({
-          id: `e-${dependency.id}-${node.id}`,
+          id: `e-${edgeTimestamp}-${nodeIndex}-${depIndex}`,
           source: dependency.id,
           target: node.id,
           type: 'floating',
           label: dependency.label,
           animated: true,
           markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
-          data: { pathType: defaultPathType },
+          data: { pathType: defaultPathType, connectionMode },
         });
       }));
 
@@ -158,7 +162,7 @@ export function useAiOrchestration({
       setEdges(layoutedEdges);
       setProjectName(plan.project_name);
       takeSnapshot(layoutedNodes as Node[], layoutedEdges);
-      setShowStartDialog(false);
+      // 注意：setShowStartDialog(false) 已在 StartDialog 动画逻辑中处理
     } catch (error: any) {
       if (error.name !== 'AbortError') {
         console.error(error);
@@ -167,7 +171,7 @@ export function useAiOrchestration({
       setIsLoading(false);
       if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
-  }, [prompt, apiKey, language, mode, defaultPathType, hydrateTaskData, setNodes, setEdges, setProjectName, takeSnapshot, setShowStartDialog]);
+  }, [prompt, provider, language, mode, defaultPathType, connectionMode, hydrateTaskData, setNodes, setEdges, setProjectName, takeSnapshot, onStreamingChange]);
 
   const handleModify = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -177,7 +181,7 @@ export function useAiOrchestration({
     setNodes((currentNodes) => currentNodes.map((node) => ({ ...node, data: { ...node.data, isAiProcessing: true } })));
 
     try {
-      const updatedPlan = await suggestModifications(getCurrentPlan(), prompt, apiKey, language, mode, controller.signal);
+      const updatedPlan = await suggestModifications(getCurrentPlan(), prompt, provider, language, mode, controller.signal);
       if (updatedPlan.suggestion) setSuggestion(updatedPlan.suggestion);
       if (updatedPlan.nodes && updatedPlan.nodes.length > 0) applyPlan(updatedPlan);
     } catch (error: any) {
@@ -189,7 +193,7 @@ export function useAiOrchestration({
       setNodes((currentNodes) => currentNodes.map((node) => ({ ...node, data: { ...node.data, isAiProcessing: false } })));
       if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
-  }, [prompt, getCurrentPlan, apiKey, language, mode, setSuggestion, applyPlan, setNodes]);
+  }, [prompt, getCurrentPlan, provider, language, mode, setSuggestion, applyPlan, setNodes]);
 
   const handleDecompose = useCallback(async () => {
     if (!selectedNodeId) return;
@@ -199,7 +203,7 @@ export function useAiOrchestration({
     setNodes((currentNodes) => currentNodes.map((node) => node.id === selectedNodeId ? { ...node, data: { ...node.data, isAiProcessing: true } } : node));
 
     try {
-      const updatedPlan = await decomposeTask(getCurrentPlan(), selectedNodeId, decomposePrompt, apiKey, language, mode, controller.signal);
+      const updatedPlan = await decomposeTask(getCurrentPlan(), selectedNodeId, decomposePrompt, provider, language, mode, controller.signal);
       applyPlan(updatedPlan);
     } catch (error: any) {
       if (error.name !== 'AbortError') {
@@ -211,7 +215,7 @@ export function useAiOrchestration({
       if (abortControllerRef.current === controller) abortControllerRef.current = null;
       setShowDecomposeInput(false);
     }
-  }, [selectedNodeId, getCurrentPlan, decomposePrompt, apiKey, language, mode, applyPlan, setNodes, setShowDecomposeInput]);
+  }, [selectedNodeId, getCurrentPlan, decomposePrompt, provider, language, mode, applyPlan, setNodes, setShowDecomposeInput]);
 
   const handleModifySelected = useCallback(async () => {
     if (!selectedPrompt.trim()) return;
@@ -222,7 +226,7 @@ export function useAiOrchestration({
     setNodes((currentNodes) => currentNodes.map((node) => selectedIds.includes(node.id) ? { ...node, data: { ...node.data, isAiProcessing: true } } : node));
 
     try {
-      const updatedPlan = await modifySelectedTasks(getCurrentPlan(), selectedIds, selectedPrompt, apiKey, language, mode, controller.signal);
+      const updatedPlan = await modifySelectedTasks(getCurrentPlan(), selectedIds, selectedPrompt, provider, language, mode, controller.signal);
       applyPlan(updatedPlan);
     } catch (error: any) {
       if (error.name !== 'AbortError') {
@@ -233,7 +237,7 @@ export function useAiOrchestration({
       setNodes((currentNodes) => currentNodes.map((node) => selectedIds.includes(node.id) ? { ...node, data: { ...node.data, isAiProcessing: false } } : node));
       if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
-  }, [selectedPrompt, nodes, getCurrentPlan, apiKey, language, mode, applyPlan, setNodes]);
+  }, [selectedPrompt, nodes, getCurrentPlan, provider, language, mode, applyPlan, setNodes]);
 
   const handleGenerateGroupTasks = useCallback(async () => {
     if (!selectedNodeId) return;
@@ -246,7 +250,7 @@ export function useAiOrchestration({
     setNodes((currentNodes) => currentNodes.map((item) => item.id === selectedNodeId ? { ...item, data: { ...item.data, isAiProcessing: true } } : item));
 
     try {
-      const plan = await generateGroupTasks((node.data as TaskData).label, (node.data as TaskData).description, apiKey, language, mode, controller.signal);
+      const plan = await generateGroupTasks((node.data as TaskData).label, (node.data as TaskData).description, provider, language, mode, controller.signal);
       const timestamp = Date.now();
       const newNodes = plan.nodes.map((item, index) => ({
         id: `n-${timestamp}-${item.id}`,
@@ -261,16 +265,17 @@ export function useAiOrchestration({
           .map((item) => item.id === node.id ? { ...item, style: { ...item.style, height: 100 + newNodes.length * 180 } } : item)
           .concat(newNodes);
         const newEdges: Edge[] = [];
-        plan.nodes.forEach((item) => item.dependencies.forEach((dependency) => {
+        const edgeTimestamp = Date.now();
+        plan.nodes.forEach((item, itemIndex) => item.dependencies.forEach((dependency, depIndex) => {
           newEdges.push({
-            id: `e-${timestamp}-${dependency.id}-${item.id}`,
+            id: `e-${edgeTimestamp}-${itemIndex}-${depIndex}`,
             source: `n-${timestamp}-${dependency.id}`,
             target: `n-${timestamp}-${item.id}`,
             type: 'floating',
             label: dependency.label,
             animated: true,
             markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
-            data: { pathType: defaultPathType },
+            data: { pathType: defaultPathType, connectionMode },
           });
         }));
 
@@ -291,7 +296,7 @@ export function useAiOrchestration({
       setNodes((currentNodes) => currentNodes.map((item) => item.id === selectedNodeId ? { ...item, data: { ...item.data, isAiProcessing: false } } : item));
       if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
-  }, [selectedNodeId, nodes, apiKey, language, mode, hydrateTaskData, defaultPathType, setNodes, setEdges, takeSnapshot]);
+  }, [selectedNodeId, nodes, provider, language, mode, hydrateTaskData, defaultPathType, connectionMode, setNodes, setEdges, takeSnapshot]);
 
   return {
     isLoading,

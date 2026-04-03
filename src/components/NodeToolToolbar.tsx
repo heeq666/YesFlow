@@ -1,0 +1,938 @@
+import React from 'react';
+import { NodeToolbar, Position } from '@xyflow/react';
+import {
+  ArrowUpRight,
+  Plus,
+  X,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { createPortal } from 'react-dom';
+
+import {
+  getAvailableNodeTools,
+  composeScheduleDateTime,
+  getToolConfig,
+  getToolLabel,
+  getToolSnapshot,
+  toInputDateValue,
+  toInputTimeValue,
+} from './NodeToolConfig';
+import { NodeSettingsContext } from '../contexts/NodeSettingsContext';
+import type { NodeToolType, ScheduleTimeType, TaskData } from '../types';
+import {
+  SCHEDULE_TIME_TYPE_OPTIONS,
+  createEmptyLinkItem,
+  deriveNodeLinkTitle,
+  ensureToolState,
+  fetchNodeLinkTitle,
+  getScheduleTimeTypeDefaultLabel,
+  normalizeNodeLinkUrl,
+} from '../utils/nodeTools';
+
+type NodeToolToolbarProps = {
+  id: string;
+  data: TaskData;
+  selected: boolean;
+  visible?: boolean;
+  onClose?: () => void;
+};
+
+function getCurrentScheduleSeed() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  const hours = `${now.getHours()}`.padStart(2, '0');
+  const minutes = `${now.getMinutes()}`.padStart(2, '0');
+
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hours}:${minutes}`,
+  };
+}
+
+function getAccentTone(toolId: NodeToolType) {
+  switch (toolId) {
+    case 'table':
+      return {
+        soft: 'bg-sky-50',
+        tint: 'bg-sky-500/12',
+        text: 'text-sky-600',
+        border: 'border-sky-200',
+        button: 'bg-sky-500 text-white hover:bg-sky-600',
+        ring: 'ring-sky-200/80',
+        glow: 'shadow-[0_18px_40px_-24px_rgba(14,165,233,0.65)]',
+      };
+    case 'document':
+      return {
+        soft: 'bg-emerald-50',
+        tint: 'bg-emerald-500/12',
+        text: 'text-emerald-600',
+        border: 'border-emerald-200',
+        button: 'bg-emerald-500 text-white hover:bg-emerald-600',
+        ring: 'ring-emerald-200/80',
+        glow: 'shadow-[0_18px_40px_-24px_rgba(16,185,129,0.6)]',
+      };
+    case 'link':
+      return {
+        soft: 'bg-violet-50',
+        tint: 'bg-violet-500/12',
+        text: 'text-violet-600',
+        border: 'border-violet-200',
+        button: 'bg-violet-500 text-white hover:bg-violet-600',
+        ring: 'ring-violet-200/80',
+        glow: 'shadow-[0_18px_40px_-24px_rgba(139,92,246,0.6)]',
+      };
+    case 'schedule':
+      return {
+        soft: 'bg-amber-50',
+        tint: 'bg-amber-500/12',
+        text: 'text-amber-600',
+        border: 'border-amber-200',
+        button: 'bg-amber-500 text-white hover:bg-amber-600',
+        ring: 'ring-amber-200/80',
+        glow: 'shadow-[0_18px_40px_-24px_rgba(245,158,11,0.6)]',
+      };
+    default:
+      return {
+        soft: 'bg-primary/10',
+        tint: 'bg-primary/10',
+        text: 'text-primary',
+        border: 'border-primary/20',
+        button: 'bg-primary text-white hover:bg-primary/90',
+        ring: 'ring-primary/20',
+        glow: 'shadow-[0_18px_40px_-24px_rgba(37,99,235,0.55)]',
+      };
+  }
+}
+
+export default function NodeToolToolbar({
+  id,
+  data,
+  selected,
+  visible = true,
+  onClose,
+}: NodeToolToolbarProps) {
+  const context = React.useContext(NodeSettingsContext);
+  const isDarkTheme = context.themeMode === 'dark';
+  const language = data.language || 'zh';
+  const availableTools = React.useMemo(
+    () => getAvailableNodeTools(context.nodeTools.enabledTools),
+    [context.nodeTools.enabledTools],
+  );
+  const [activeTool, setActiveTool] = React.useState<NodeToolType | null>(null);
+  const [openingTool, setOpeningTool] = React.useState<NodeToolType | null>(null);
+  const [documentDraft, setDocumentDraft] = React.useState('');
+  const openingTimerRef = React.useRef<number | null>(null);
+  const linkInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
+  const pendingLinkFocusIdRef = React.useRef<string | null>(null);
+  const linkRequestControllersRef = React.useRef<Record<string, AbortController>>({});
+  const dataRef = React.useRef(data);
+
+  const hasToolButtons = availableTools.length > 0;
+
+  React.useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  React.useEffect(() => {
+    if (!selected || !visible) {
+      if (openingTimerRef.current) {
+        window.clearTimeout(openingTimerRef.current);
+        openingTimerRef.current = null;
+      }
+      setOpeningTool(null);
+      setActiveTool(null);
+    }
+  }, [selected, visible]);
+
+  React.useEffect(() => {
+    return () => {
+      if (openingTimerRef.current) {
+        window.clearTimeout(openingTimerRef.current);
+      }
+      for (const controller of Object.values(linkRequestControllersRef.current) as AbortController[]) {
+        controller.abort();
+      }
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!activeTool) return;
+
+    if (activeTool === 'document') {
+      setDocumentDraft(data.tools?.document?.content || '');
+      return;
+    }
+  }, [activeTool, data.tools]);
+
+  React.useEffect(() => {
+    const pendingId = pendingLinkFocusIdRef.current;
+    if (!pendingId) return;
+    const target = linkInputRefs.current[pendingId];
+    if (!target) return;
+    target.focus();
+    pendingLinkFocusIdRef.current = null;
+  }, [data.tools?.link?.items]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      if (activeTool) {
+        commitQuickDraft(activeTool);
+        setActiveTool(null);
+        return;
+      }
+      onClose?.();
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [activeTool, onClose, visible]);
+
+  if (!selected || !visible || !hasToolButtons) {
+    return null;
+  }
+
+  const updateTools = (tool: NodeToolType, nextTools: TaskData['tools']) => {
+    data.onUpdateData?.(id, {
+      tools: {
+        ...nextTools,
+        activeTool: tool,
+      },
+    });
+  };
+
+  const openWorkspace = (tool: NodeToolType) => {
+    if (data.onOpenToolPanel) {
+      data.onOpenToolPanel(id, tool);
+    } else {
+      data.onUpdateData?.(id, { tools: ensureToolState(data, tool, language) });
+    }
+
+    setActiveTool(null);
+    onClose?.();
+  };
+
+  const openQuickTool = (tool: NodeToolType) => {
+    if (openingTimerRef.current) {
+      window.clearTimeout(openingTimerRef.current);
+      openingTimerRef.current = null;
+    }
+
+    setOpeningTool(tool);
+    openingTimerRef.current = window.setTimeout(() => {
+      setActiveTool(tool);
+      setOpeningTool(null);
+      openingTimerRef.current = null;
+    }, 120);
+  };
+
+  const saveDocumentQuick = () => {
+    const tools = ensureToolState(data, 'document', language);
+    updateTools('document', {
+      ...tools,
+      document: {
+        ...tools.document!,
+        enabled: true,
+        content: documentDraft,
+      },
+    });
+  };
+
+  const updateLinkItems = (nextItems: Array<{ id: string; title: string; url: string }>, enabled = nextItems.length > 0) => {
+    const currentData = dataRef.current;
+    const tools = ensureToolState(currentData, 'link', language);
+    updateTools('link', {
+      ...tools,
+      link: {
+        enabled,
+        items: nextItems,
+      },
+    });
+  };
+
+  const resolveLinkTitle = async (itemId: string, value: string) => {
+    const normalizedUrl = normalizeNodeLinkUrl(value);
+    if (!normalizedUrl) return;
+
+    linkRequestControllersRef.current[itemId]?.abort();
+    const controller = new AbortController();
+    linkRequestControllersRef.current[itemId] = controller;
+
+    const resolvedTitle = await fetchNodeLinkTitle(normalizedUrl, controller.signal);
+    if (linkRequestControllersRef.current[itemId] !== controller) return;
+
+    delete linkRequestControllersRef.current[itemId];
+
+    if (!resolvedTitle) return;
+
+    const currentData = dataRef.current;
+    const linkItems = Array.isArray(currentData.tools?.link?.items) ? currentData.tools?.link?.items : [];
+    const targetItem = linkItems.find((item) => item.id === itemId);
+    if (!targetItem || normalizeNodeLinkUrl(targetItem.url) !== normalizedUrl) return;
+
+    updateLinkItems(
+      linkItems.map((item) => (item.id === itemId ? { ...item, title: resolvedTitle, url: normalizedUrl } : item)),
+    );
+  };
+
+  const addEmptyLinkItem = () => {
+    const currentData = dataRef.current;
+    const linkItems = Array.isArray(currentData.tools?.link?.items) ? currentData.tools?.link?.items : [];
+    const nextItem = createEmptyLinkItem();
+    pendingLinkFocusIdRef.current = nextItem.id;
+    updateLinkItems([...linkItems, nextItem], true);
+  };
+
+  const handleLinkChange = (itemId: string, value: string) => {
+    const currentData = dataRef.current;
+    const linkItems = Array.isArray(currentData.tools?.link?.items) ? currentData.tools?.link?.items : [];
+
+    updateLinkItems(
+      linkItems.map((item) => (item.id === itemId ? { ...item, title: '', url: value } : item)),
+    );
+  };
+
+  const finalizeLinkItem = (itemId: string, value: string) => {
+    const normalizedUrl = normalizeNodeLinkUrl(value);
+    if (!normalizedUrl) return;
+
+    const currentData = dataRef.current;
+    const linkItems = Array.isArray(currentData.tools?.link?.items) ? currentData.tools?.link?.items : [];
+
+    updateLinkItems(
+      linkItems.map((item) => (
+        item.id === itemId
+          ? { ...item, title: deriveNodeLinkTitle(normalizedUrl), url: normalizedUrl }
+          : item
+      )),
+    );
+    void resolveLinkTitle(itemId, normalizedUrl);
+  };
+
+  const deleteLinkItem = (itemId: string) => {
+    linkRequestControllersRef.current[itemId]?.abort();
+    delete linkRequestControllersRef.current[itemId];
+
+    const currentData = dataRef.current;
+    const linkItems = Array.isArray(currentData.tools?.link?.items) ? currentData.tools?.link?.items : [];
+    const nextItems = linkItems.filter((item) => item.id !== itemId);
+    updateLinkItems(nextItems, nextItems.length > 0);
+  };
+
+  const updateScheduleItems = (nextItems: Array<{
+    id: string;
+    timeType: ScheduleTimeType;
+    label?: string;
+    dateTime?: string;
+    allDay?: boolean;
+  }>, enabled = nextItems.length > 0) => {
+    const currentData = dataRef.current;
+    const tools = ensureToolState(currentData, 'schedule', language);
+    updateTools('schedule', {
+      ...tools,
+      schedule: {
+        enabled,
+        items: nextItems,
+      },
+    });
+  };
+
+  const addScheduleItemQuick = () => {
+    const currentSeed = getCurrentScheduleSeed();
+    const dateTime = composeScheduleDateTime(currentSeed.date, currentSeed.time, false);
+    if (!dateTime) return;
+
+    const currentData = dataRef.current;
+    const scheduleItems = Array.isArray(currentData.tools?.schedule?.items) ? currentData.tools?.schedule?.items : [];
+    updateScheduleItems([
+      ...scheduleItems,
+      {
+        id: `time-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        timeType: 'custom',
+        label: getScheduleTimeTypeDefaultLabel('custom', language),
+        dateTime,
+        allDay: false,
+      },
+    ], true);
+  };
+
+  const updateScheduleItemQuick = (
+    itemId: string,
+    updates: Partial<{
+      date: string;
+      time: string;
+      allDay: boolean;
+      timeType: ScheduleTimeType;
+    }>,
+  ) => {
+    const currentData = dataRef.current;
+    const scheduleItems = Array.isArray(currentData.tools?.schedule?.items) ? currentData.tools?.schedule?.items : [];
+
+    const nextItems = scheduleItems.map((item) => {
+      if (item.id !== itemId) return item;
+
+      const currentSeed = getCurrentScheduleSeed();
+      const nextDate = updates.date ?? toInputDateValue(item.dateTime) ?? currentSeed.date;
+      const nextTime = updates.time ?? toInputTimeValue(item.dateTime) ?? currentSeed.time;
+      const nextAllDay = updates.allDay ?? Boolean(item.allDay);
+      const nextTimeType = updates.timeType ?? item.timeType;
+      const nextDateTime = composeScheduleDateTime(nextDate, nextTime, nextAllDay) || item.dateTime;
+
+      return {
+        ...item,
+        dateTime: nextDateTime,
+        allDay: nextAllDay,
+        timeType: nextTimeType,
+        label: getScheduleTimeTypeDefaultLabel(nextTimeType, language),
+      };
+    });
+
+    updateScheduleItems(nextItems, nextItems.length > 0);
+  };
+
+  const deleteScheduleItemQuick = (itemId: string) => {
+    const currentData = dataRef.current;
+    const scheduleItems = Array.isArray(currentData.tools?.schedule?.items) ? currentData.tools?.schedule?.items : [];
+    const nextItems = scheduleItems.filter((item) => item.id !== itemId);
+    updateScheduleItems(nextItems, nextItems.length > 0);
+  };
+
+  const commitQuickDraft = (tool: NodeToolType | null) => {
+    if (!tool) return;
+    if (tool === 'document') saveDocumentQuick();
+  };
+
+  const closeQuickTool = () => {
+    if (openingTimerRef.current) {
+      window.clearTimeout(openingTimerRef.current);
+      openingTimerRef.current = null;
+    }
+    setOpeningTool(null);
+    commitQuickDraft(activeTool);
+    setActiveTool(null);
+  };
+
+  const insertDocumentSnippet = (snippet: string) => {
+    setDocumentDraft((current) => {
+      const base = current.trim();
+      return base ? `${base}\n\n${snippet}` : snippet;
+    });
+  };
+
+  const renderOverview = () => (
+    <div className={`w-[252px] rounded-[22px] border p-2.5 backdrop-blur-xl ${
+      isDarkTheme
+        ? 'border-slate-600/50 bg-slate-900/95 shadow-[0_28px_60px_-30px_rgba(2,6,23,0.92)]'
+        : 'border-white/80 bg-white/95 shadow-[0_22px_54px_-28px_rgba(15,23,42,0.42)]'
+    }`}>
+      <div className="grid grid-cols-4 gap-2">
+        {availableTools.map((tool) => {
+          const snapshot = getToolSnapshot(tool.id, data, language);
+          const config = getToolConfig(tool.id);
+          const tone = getAccentTone(tool.id);
+          const isPreviewOnly = config?.quickMode === 'preview-only';
+          const hasPreviewContent = snapshot.railBadge.kind === 'count' || snapshot.railBadge.kind === 'dot';
+          const isSelected = activeTool === tool.id || openingTool === tool.id;
+          const buttonStateClass = isSelected
+            ? `${isPreviewOnly ? 'border-neutral-300 bg-neutral-100 text-neutral-700' : `${tone.border} ${tone.tint} ${tone.text} ${tone.glow}`}`
+            : 'border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 hover:shadow-[0_16px_36px_-26px_rgba(15,23,42,0.35)]';
+
+          return (
+            <motion.button
+              key={tool.id}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (isPreviewOnly && !hasPreviewContent) {
+                  openWorkspace(tool.id);
+                  return;
+                }
+                openQuickTool(tool.id);
+              }}
+              whileTap={{ scale: 0.9 }}
+              animate={
+                openingTool === tool.id
+                  ? { scale: [1, 0.9, 1.06, 1], y: [0, 1, -1, 0] }
+                  : { scale: 1, y: 0 }
+              }
+              transition={
+                openingTool === tool.id
+                  ? { duration: 0.24, times: [0, 0.25, 0.65, 1], ease: 'easeOut' }
+                  : { duration: 0.12 }
+              }
+              className={`group relative flex h-14 w-14 items-center justify-center rounded-[18px] border transition-all ${buttonStateClass}`}
+              title={getToolLabel(tool.id, language)}
+              aria-label={getToolLabel(tool.id, language)}
+            >
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ring-1 ${
+                isSelected
+                  ? `${isPreviewOnly ? 'bg-white text-neutral-700 ring-neutral-200' : `${tone.soft} ${tone.text} ${tone.ring}`}`
+                  : 'bg-white text-neutral-500 ring-black/5'
+              }`}>
+                {tool.icon}
+              </div>
+              <span
+                className={`absolute right-0.5 top-0.5 flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-[9px] font-black leading-none ${
+                  snapshot.railBadge.kind === 'disabled'
+                    ? 'bg-neutral-100 text-neutral-400'
+                    : snapshot.railBadge.kind === 'empty'
+                      ? 'bg-white text-amber-500'
+                      : snapshot.railBadge.kind === 'dot'
+                        ? `${tone.tint} ${tone.text}`
+                        : 'bg-neutral-900 text-white'
+                }`}
+              >
+                {snapshot.railBadge.kind === 'disabled' || snapshot.railBadge.kind === 'dot' ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                ) : snapshot.railBadge.kind === 'empty' ? (
+                  <span className="h-2 w-2 rounded-full border border-current" />
+                ) : (
+                  snapshot.railBadge.value
+                )}
+              </span>
+              <span className={`absolute bottom-[calc(100%+8px)] left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white opacity-0 shadow-lg transition-all duration-150 pointer-events-none group-hover:opacity-100 ${tone.button.split(' ').slice(0, 2).join(' ')}`}>
+                {getToolLabel(tool.id, language)}
+              </span>
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderTableQuickView = () => {
+    const table = data.tools?.table;
+    const rows = Array.isArray(table?.rows) ? table.rows.slice(0, 3) : [];
+    const columns = Array.isArray(table?.columns) ? table.columns.slice(0, 3) : [];
+
+    return (
+      <div>
+        <div>
+          {table?.enabled ? (
+            <>
+              <div className="overflow-hidden rounded-[18px] border border-neutral-200 bg-white">
+                <div className="grid bg-neutral-50 px-2 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-neutral-400" style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))` }}>
+                  {(columns.length ? columns : [language === 'zh' ? '字段' : 'Field']).map((column) => (
+                    <div key={column} className="truncate px-2">{column}</div>
+                  ))}
+                </div>
+                <div className="divide-y divide-neutral-100">
+                  {rows.length > 0 ? (
+                    rows.map((row) => (
+                      <div key={row.id} className="grid px-2 py-2 text-[11px] text-neutral-600" style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))` }}>
+                        {(columns.length
+                          ? columns
+                          : Object.keys((row && typeof row.values === 'object' && row.values) ? row.values : {}).slice(0, 1)
+                        ).map((column) => (
+                          <div key={`${row.id}-${column}`} className="truncate px-2">
+                            {((row && typeof row.values === 'object' && row.values) ? row.values[column] : '') || '—'}
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-3 text-[11px] text-neutral-400">
+                      {language === 'zh' ? '表格已创建，但还没有录入数据。' : 'Table created, no rows entered yet.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-[12px] leading-6 text-neutral-500">
+              {language === 'zh'
+                ? '表格属于复杂编辑工具，建议直接进入工具台处理。'
+                : 'Tables are complex tools. Use the workspace for editing.'}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderQuickMeta = (toolId: NodeToolType) => {
+    if (toolId === 'table') {
+      const table = data.tools?.table;
+      const rowCount = Array.isArray(table?.rows) ? table.rows.length : 0;
+      const columnCount = Array.isArray(table?.columns) ? table.columns.length : 0;
+      if (!table?.enabled) return null;
+
+      return (
+        <div className="text-sm font-black text-neutral-900">
+          {language === 'zh'
+            ? `${rowCount} 行 / ${columnCount} 列`
+            : `${rowCount} rows / ${columnCount} cols`}
+        </div>
+      );
+    }
+
+    if (toolId === 'document') {
+      return (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => insertDocumentSnippet(language === 'zh' ? '- [ ] 待办事项' : '- [ ] Todo')}
+            className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-neutral-500 transition-all hover:bg-emerald-50 hover:text-emerald-600"
+          >
+            {language === 'zh' ? '待办' : 'Todo'}
+          </button>
+          <button
+            type="button"
+            onClick={() => insertDocumentSnippet(language === 'zh' ? '## 小标题' : '## Heading')}
+            className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-neutral-500 transition-all hover:bg-emerald-50 hover:text-emerald-600"
+          >
+            {language === 'zh' ? '标题' : 'Heading'}
+          </button>
+          <button
+            type="button"
+            onClick={() => insertDocumentSnippet(language === 'zh' ? '- 列表项' : '- List item')}
+            className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-neutral-500 transition-all hover:bg-emerald-50 hover:text-emerald-600"
+          >
+            {language === 'zh' ? '列表' : 'List'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDocumentDraft('')}
+            className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-neutral-500 transition-all hover:bg-red-50 hover:text-red-500"
+          >
+            {language === 'zh' ? '清空' : 'Clear'}
+          </button>
+        </div>
+      );
+    }
+
+    if (toolId === 'link') {
+      return (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={addEmptyLinkItem}
+            className="flex h-9 w-9 items-center justify-center rounded-2xl bg-violet-50 text-violet-600 transition-all hover:bg-violet-100"
+            title={language === 'zh' ? '新增链接' : 'Add link'}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      );
+    }
+
+    if (toolId === 'schedule') {
+      return (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={addScheduleItemQuick}
+            className="flex h-9 w-9 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 transition-all hover:bg-amber-100"
+            title={language === 'zh' ? '新增时间' : 'Add schedule'}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderDocumentQuickView = () => (
+    <div>
+      <textarea
+        value={documentDraft}
+        onChange={(event) => setDocumentDraft(event.target.value)}
+        placeholder={language === 'zh' ? '记录几句说明或上下文...' : 'Add a few notes or context...'}
+        className="min-h-[148px] w-full rounded-[18px] border border-neutral-200 bg-white px-3 py-3 text-[12px] text-neutral-700 outline-none transition-all focus:border-emerald-200 focus:bg-white"
+      />
+    </div>
+  );
+
+  const renderLinkQuickView = () => (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        {(Array.isArray(data.tools?.link?.items) ? data.tools?.link?.items : []).length > 0 ? (
+          (Array.isArray(data.tools?.link?.items) ? data.tools?.link?.items : []).map((item, index) => {
+            const normalizedUrl = normalizeNodeLinkUrl(item.url);
+            const displayTitle =
+              item.title.trim()
+              || deriveNodeLinkTitle(item.url)
+              || (language === 'zh' ? `链接 ${index + 1}` : `Link ${index + 1}`);
+
+            return (
+              <div key={item.id} className="rounded-[16px] border border-neutral-200 bg-white px-2.5 py-2">
+                <div className="mb-1.5 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[11px] font-black text-neutral-800">
+                      {displayTitle}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => deleteLinkItem(item.id)}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-300 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                    title={language === 'zh' ? '删除链接' : 'Delete link'}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    ref={(element) => {
+                      linkInputRefs.current[item.id] = element;
+                    }}
+                    value={item.url}
+                    onChange={(event) => handleLinkChange(item.id, event.target.value)}
+                    onBlur={() => finalizeLinkItem(item.id, item.url)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter') return;
+                      event.preventDefault();
+                      finalizeLinkItem(item.id, item.url);
+                    }}
+                    placeholder="https://"
+                    className="min-w-0 w-full rounded-[14px] border border-neutral-200 bg-white px-3 py-2 pr-[4.9rem] text-[12px] text-neutral-700 outline-none transition-all focus:border-violet-200 focus:bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      finalizeLinkItem(item.id, item.url);
+                      if (normalizedUrl) {
+                        window.open(normalizedUrl, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                    disabled={!item.url.trim()}
+                    className={`absolute right-1 top-1/2 flex h-8 -translate-y-1/2 items-center justify-center rounded-[10px] px-2.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all ${
+                      normalizedUrl
+                        ? 'bg-violet-50 text-violet-600 hover:bg-violet-100'
+                        : 'bg-neutral-100 text-neutral-400 hover:bg-neutral-200'
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {normalizedUrl
+                      ? (language === 'zh' ? '访问' : 'Visit')
+                      : (language === 'zh' ? '添加' : 'Add')}
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="rounded-[18px] bg-neutral-50 px-3 py-3 text-[12px] text-neutral-500 ring-1 ring-black/5">
+            {language === 'zh' ? '点击上方加号，直接创建一条链接。' : 'Use the plus button above to create a link.'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderScheduleQuickView = () => {
+    const scheduleItems = Array.isArray(data.tools?.schedule?.items) ? data.tools?.schedule?.items : [];
+
+    return (
+      <div className="space-y-2.5">
+        {scheduleItems.length > 0 ? (
+          scheduleItems.map((item) => {
+            const dateValue = toInputDateValue(item.dateTime) || getCurrentScheduleSeed().date;
+            const timeValue = toInputTimeValue(item.dateTime) || getCurrentScheduleSeed().time;
+
+            return (
+              <div key={item.id} className="rounded-[16px] border border-neutral-200 bg-white px-2.5 py-2">
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {SCHEDULE_TIME_TYPE_OPTIONS.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => updateScheduleItemQuick(item.id, { timeType: type.id })}
+                        className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] transition-all ${
+                          item.timeType === type.id
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                        }`}
+                      >
+                        {type.icon} {language === 'zh' ? type.labelZh : type.labelEn}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => deleteScheduleItemQuick(item.id)}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-300 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                    title={language === 'zh' ? '删除时间' : 'Delete time'}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)_auto] gap-2">
+                  <input
+                    type="date"
+                    value={dateValue}
+                    onChange={(event) => updateScheduleItemQuick(item.id, { date: event.target.value })}
+                    className="rounded-[14px] border border-neutral-200 bg-white px-3 py-2 text-[12px] text-neutral-700 outline-none transition-all focus:border-amber-200 focus:bg-white"
+                  />
+                  <input
+                    type="time"
+                    value={timeValue}
+                    disabled={Boolean(item.allDay)}
+                    onChange={(event) => updateScheduleItemQuick(item.id, { time: event.target.value })}
+                    className="rounded-[14px] border border-neutral-200 bg-white px-3 py-2 text-[12px] text-neutral-700 outline-none transition-all focus:border-amber-200 focus:bg-white disabled:opacity-40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updateScheduleItemQuick(item.id, { allDay: !item.allDay })}
+                    className={`rounded-[14px] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
+                      item.allDay
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    }`}
+                  >
+                    {language === 'zh' ? '全天' : 'All-day'}
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="rounded-[16px] bg-neutral-50 px-3 py-2.5 text-[11px] text-neutral-500 ring-1 ring-black/5">
+            {language === 'zh' ? '左上角点新增，直接添加当前时间。' : 'Use Add new in the top-left to create a time entry.'}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderQuickActions = (toolId: NodeToolType) => {
+    const tone = getAccentTone(toolId);
+    return (
+      <>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            openWorkspace(toolId);
+          }}
+          title={language === 'zh' ? '进入工具台' : 'Open workspace'}
+          className={`flex h-9 w-9 items-center justify-center rounded-2xl shadow-sm ${tone.button}`}
+        >
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            closeQuickTool();
+          }}
+          title={language === 'zh' ? '返回工具总览' : 'Back to tools'}
+          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-red-100 bg-red-50 text-red-500 shadow-sm transition-all hover:border-red-200 hover:bg-red-100 hover:text-red-600"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </>
+    );
+  };
+
+  const renderQuickContent = (toolId: NodeToolType) => {
+    switch (toolId) {
+      case 'table':
+        return renderTableQuickView();
+      case 'document':
+        return renderDocumentQuickView();
+      case 'link':
+        return renderLinkQuickView();
+      case 'schedule':
+        return renderScheduleQuickView();
+      default:
+        return null;
+    }
+  };
+
+  const renderQuickTool = () => {
+    if (!activeTool) return null;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.82, y: 64 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.82, y: 64 }}
+        transition={{
+          type: 'spring',
+          stiffness: 360,
+          damping: 30,
+          mass: 0.9,
+        }}
+        className="w-[430px] rounded-[22px] border border-white/80 bg-white/95 p-3 shadow-[0_22px_54px_-28px_rgba(15,23,42,0.42)] backdrop-blur-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="relative px-2 pb-2 pt-1.5">
+          <div className={`mb-2 flex items-start gap-2 pr-1 pt-0.5 ${renderQuickMeta(activeTool) ? 'justify-between' : 'justify-end'}`}>
+            <div className="min-w-0 flex-1" onClick={(event) => event.stopPropagation()}>
+              {renderQuickMeta(activeTool)}
+            </div>
+            <div className="flex items-center gap-2">
+              {renderQuickActions(activeTool)}
+            </div>
+          </div>
+          <div onClick={(event) => event.stopPropagation()}>
+            {renderQuickContent(activeTool)}
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
+  const portalTarget = typeof document !== 'undefined' ? document.body : null;
+
+  return (
+    <>
+      <NodeToolbar isVisible position={Position.Bottom} align="center" offset={18}>
+        <motion.div
+          initial={{ opacity: 0, y: -6, scale: 0.96 }}
+          animate={{
+            opacity: 1,
+            y: 0,
+            scale: 1,
+          }}
+          transition={{
+            opacity: { duration: 0.16 },
+            y: { duration: 0.16 },
+            scale: { duration: 0.16 },
+          }}
+          className="overflow-visible"
+        >
+          {renderOverview()}
+        </motion.div>
+      </NodeToolbar>
+
+      {portalTarget &&
+        createPortal(
+          <AnimatePresence>
+            {visible && activeTool && (
+              <motion.div
+                key={`tool-layer-${activeTool}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className={`app-shell fixed inset-0 z-[1200] flex items-end justify-center p-4 sm:items-center sm:p-8 ${
+                  isDarkTheme ? 'theme-dark' : 'theme-light'
+                }`}
+                onClick={closeQuickTool}
+              >
+                <motion.div
+                  className="absolute inset-0 bg-neutral-900/35 backdrop-blur-[2px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                />
+                {renderQuickTool()}
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          portalTarget,
+        )}
+    </>
+  );
+}

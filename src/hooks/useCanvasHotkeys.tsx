@@ -18,6 +18,8 @@ type UseCanvasHotkeysParams = {
   handleCut: () => void;
   handleSaveToLocal: () => void;
   handleSaveFile: () => void;
+  handleGroupSelection: () => void;
+  handleUngroup: (groupId: string) => void;
   deleteNodesAndReconnect: (nodeIdsToDelete: string[]) => void;
   showStatus: (text: string, icon: React.ReactNode) => void;
   takeSnapshot: (currentNodes?: Node[], currentEdges?: Edge[]) => void;
@@ -37,6 +39,8 @@ export function useCanvasHotkeys({
   handleCut,
   handleSaveToLocal,
   handleSaveFile,
+  handleGroupSelection,
+  handleUngroup,
   deleteNodesAndReconnect,
   showStatus,
   takeSnapshot,
@@ -79,6 +83,19 @@ export function useCanvasHotkeys({
       if (matchesHotkey(settings.hotkeys.pan, event) || matchesHotkey(settings.hotkeys.select, event)) {
         if (settings.hotkeys.pan.toLowerCase().includes('space')) {
           event.preventDefault();
+        }
+      }
+
+      if (matchesHotkey(settings.hotkeys.group, event)) {
+        event.preventDefault();
+        handleGroupSelection();
+      }
+
+      if (matchesHotkey(settings.hotkeys.ungroup, event)) {
+        event.preventDefault();
+        const selectedGroup = nodes.find(n => n.selected && n.type === 'group');
+        if (selectedGroup) {
+          handleUngroup(selectedGroup.id);
         }
       }
 
