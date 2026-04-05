@@ -79,7 +79,7 @@ type FlowCanvasProps = {
   onToggleLanguage: () => void;
 };
 
-export default function FlowCanvas({
+const FlowCanvas = React.memo(function FlowCanvas({
   selectionBox,
   transform,
   nodes,
@@ -240,4 +240,8 @@ export default function FlowCanvas({
       </ReactFlow>
     </div>
   );
-}
+});
+
+FlowCanvas.displayName = 'FlowCanvas';
+
+export default FlowCanvas;

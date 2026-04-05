@@ -21,13 +21,24 @@ export function useEdgeHighlighting({
     if (selectedNodeIds.length > 0) {
       const downstreamNodeIds = new Set<string>(selectedNodeIds);
       const queue = [...selectedNodeIds];
+      const outgoingBySource = new Map<string, Edge[]>();
+
+      for (const edge of edges) {
+        const list = outgoingBySource.get(edge.source);
+        if (list) {
+          list.push(edge);
+        } else {
+          outgoingBySource.set(edge.source, [edge]);
+        }
+      }
 
       while (queue.length > 0) {
         const current = queue.shift();
         if (!current) continue;
 
-        for (const edge of edges) {
-          if (edge.source !== current) continue;
+        const outgoing = outgoingBySource.get(current);
+        if (!outgoing) continue;
+        for (const edge of outgoing) {
           highlightedEdgeIds.add(edge.id);
           if (!downstreamNodeIds.has(edge.target)) {
             downstreamNodeIds.add(edge.target);
@@ -37,15 +48,35 @@ export function useEdgeHighlighting({
       }
     }
 
-    return edges.map((edge) => ({
-      ...edge,
-      data: {
-        ...edge.data,
-        isHighlighted: highlightedEdgeIds.has(edge.id),
-        activeColor: edgeSelectedColor,
-        globalColor: edgeColor,
-      },
-    }));
+    let hasChanged = false;
+    const nextEdges = edges.map((edge) => {
+      const isHighlighted = highlightedEdgeIds.has(edge.id);
+      const currentData = (edge.data ?? {}) as {
+        isHighlighted?: boolean;
+        activeColor?: string;
+        globalColor?: string;
+      };
+
+      if (
+        currentData.isHighlighted === isHighlighted &&
+        currentData.activeColor === edgeSelectedColor &&
+        currentData.globalColor === edgeColor
+      ) {
+        return edge;
+      }
+
+      hasChanged = true;
+      return {
+        ...edge,
+        data: {
+          ...currentData,
+          isHighlighted,
+          activeColor: edgeSelectedColor,
+          globalColor: edgeColor,
+        },
+      };
+    });
+
+    return hasChanged ? nextEdges : edges;
   }, [nodes, edges, edgeColor, edgeSelectedColor]);
 }
-

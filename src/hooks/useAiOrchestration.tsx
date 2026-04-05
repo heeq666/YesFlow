@@ -3,8 +3,6 @@ import type React from 'react';
 import { MarkerType, type Edge, type Node } from '@xyflow/react';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 
-import { decomposeTask, generateGroupTasks, generatePlan, modifySelectedTasks, suggestModifications } from '../services/aiService';
-import { getLayoutedElements } from '../lib/flowLayout';
 import type { AIProjectPlan, ConnectionMode, TaskData, TaskMode, ApiProvider } from '../types';
 import { getTaskNodeLayout } from '../constants/taskNodeLayout';
 
@@ -103,6 +101,9 @@ export function useAiOrchestration({
   useEffect(() => { onPlanRequestSettledRef.current = onPlanRequestSettled; }, [onPlanRequestSettled]);
   useEffect(() => { onViewportRequestRef.current = onViewportRequest; }, [onViewportRequest]);
 
+  const loadAiService = useCallback(() => import('../services/aiService'), []);
+  const loadFlowLayout = useCallback(() => import('../lib/flowLayout'), []);
+
   const getAiErrorMessage = useCallback((error: unknown) => {
     if (error instanceof Error) {
       const compactMessage = error.message.replace(/\s+/g, ' ').trim();
@@ -160,7 +161,7 @@ export function useAiOrchestration({
     })),
   }), [nodes, edges, projectName]);
 
-  const applyPlan = useCallback((plan: AIProjectPlan, viewportRequest?: { scope: 'all' | 'nodes'; nodeIds?: string[] } | null) => {
+  const applyPlan = useCallback(async (plan: AIProjectPlan, viewportRequest?: { scope: 'all' | 'nodes'; nodeIds?: string[] } | null) => {
     const allEdges: Edge[] = [];
     const edgeTimestamp = Date.now();
     plan.nodes.forEach((node, nodeIndex) => {
@@ -178,6 +179,7 @@ export function useAiOrchestration({
       });
     });
 
+    const { getLayoutedElements } = await loadFlowLayout();
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       plan.nodes.map((rawNode) => {
         const node = normalizePlanNode(rawNode);
@@ -204,7 +206,7 @@ export function useAiOrchestration({
     if (viewportRequest) {
       onViewportRequestRef.current?.(viewportRequest);
     }
-  }, [connectionMode, defaultPathType, hydrateTaskDataRef, mode, nodes, normalizePlanNode]);
+  }, [connectionMode, defaultPathType, hydrateTaskData, mode, nodes, normalizePlanNode, loadFlowLayout]);
 
   const beginRequest = useCallback((kind: AiRequestKind) => {
     const controller = new AbortController();
@@ -269,6 +271,7 @@ export function useAiOrchestration({
     const { controller, requestVersion } = beginRequest('generate-plan');
 
     try {
+      const { generatePlan } = await loadAiService();
       const plan = await generatePlan(prompt, provider, language, mode, controller.signal, onStreamingChangeRef.current);
       if (!isRequestCurrent(controller, requestVersion, 'generate-plan')) return;
       const allEdges: Edge[] = [];
@@ -286,6 +289,7 @@ export function useAiOrchestration({
         });
       }));
 
+      const { getLayoutedElements } = await loadFlowLayout();
       const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
         plan.nodes.map((rawNode) => {
           const node = normalizePlanNode(rawNode);
@@ -325,7 +329,7 @@ export function useAiOrchestration({
         activeRequestRef.current = null;
       }
     }
-  }, [prompt, provider, language, mode, defaultPathType, connectionMode, normalizePlanNode, showAiFailure, beginRequest, isRequestCurrent]);
+  }, [prompt, provider, language, mode, defaultPathType, connectionMode, normalizePlanNode, showAiFailure, beginRequest, isRequestCurrent, loadAiService, loadFlowLayout]);
 
   const handleModify = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -334,10 +338,13 @@ export function useAiOrchestration({
     setNodesRef.current((currentNodes) => currentNodes.map((node) => ({ ...node, data: { ...node.data, isAiProcessing: true } })));
 
     try {
+      const { suggestModifications } = await loadAiService();
       const updatedPlan = await suggestModifications(getCurrentPlan(), prompt, provider, language, mode, controller.signal);
       if (!isRequestCurrent(controller, requestVersion, 'modify-plan')) return;
       if (updatedPlan.suggestion) setSuggestionRef.current(updatedPlan.suggestion);
-      if (updatedPlan.nodes && updatedPlan.nodes.length > 0) applyPlan(updatedPlan, { scope: 'all', nodeIds: updatedPlan.nodes.map((node) => node.id) });
+      if (updatedPlan.nodes && updatedPlan.nodes.length > 0) {
+        await applyPlan(updatedPlan, { scope: 'all', nodeIds: updatedPlan.nodes.map((node) => node.id) });
+      }
     } catch (error: any) {
       if (error.name !== 'AbortError' && isRequestCurrent(controller, requestVersion, 'modify-plan')) {
         console.error(error);
@@ -351,7 +358,7 @@ export function useAiOrchestration({
         activeRequestRef.current = null;
       }
     }
-  }, [prompt, getCurrentPlan, provider, language, mode, applyPlan, showAiFailure, beginRequest, clearAllNodeAiProcessing, isRequestCurrent]);
+  }, [prompt, getCurrentPlan, provider, language, mode, applyPlan, showAiFailure, beginRequest, clearAllNodeAiProcessing, isRequestCurrent, loadAiService]);
 
   const handleDecompose = useCallback(async () => {
     if (!selectedNodeId) return;
@@ -360,9 +367,10 @@ export function useAiOrchestration({
     setNodesRef.current((currentNodes) => currentNodes.map((node) => node.id === selectedNodeId ? { ...node, data: { ...node.data, isAiProcessing: true } } : node));
 
     try {
+      const { decomposeTask } = await loadAiService();
       const updatedPlan = await decomposeTask(getCurrentPlan(), selectedNodeId, decomposePrompt, provider, language, mode, controller.signal);
       if (!isRequestCurrent(controller, requestVersion, 'decompose-node')) return;
-      applyPlan(updatedPlan, null);
+      await applyPlan(updatedPlan, null);
       showStatusRef.current(language === 'zh' ? '拆解已完成' : 'Decomposition completed', <CheckCircle2 className="w-3.5 h-3.5" />);
     } catch (error: any) {
       if (error.name !== 'AbortError' && isRequestCurrent(controller, requestVersion, 'decompose-node')) {
@@ -378,7 +386,7 @@ export function useAiOrchestration({
         setShowDecomposeInputRef.current(false);
       }
     }
-  }, [selectedNodeId, getCurrentPlan, decomposePrompt, provider, language, mode, applyPlan, showAiFailure, beginRequest, clearNodeAiProcessingByIds, isRequestCurrent]);
+  }, [selectedNodeId, getCurrentPlan, decomposePrompt, provider, language, mode, applyPlan, showAiFailure, beginRequest, clearNodeAiProcessingByIds, isRequestCurrent, loadAiService]);
 
   const handleModifySelected = useCallback(async () => {
     if (!selectedPrompt.trim()) return;
@@ -388,9 +396,10 @@ export function useAiOrchestration({
     setNodesRef.current((currentNodes) => currentNodes.map((node) => selectedIds.includes(node.id) ? { ...node, data: { ...node.data, isAiProcessing: true } } : node));
 
     try {
+      const { modifySelectedTasks } = await loadAiService();
       const updatedPlan = await modifySelectedTasks(getCurrentPlan(), selectedIds, selectedPrompt, provider, language, mode, controller.signal);
       if (!isRequestCurrent(controller, requestVersion, 'modify-selected')) return;
-      applyPlan(updatedPlan, { scope: 'all', nodeIds: updatedPlan.nodes.map((node) => node.id) });
+      await applyPlan(updatedPlan, { scope: 'all', nodeIds: updatedPlan.nodes.map((node) => node.id) });
     } catch (error: any) {
       if (error.name !== 'AbortError' && isRequestCurrent(controller, requestVersion, 'modify-selected')) {
         console.error(error);
@@ -404,7 +413,7 @@ export function useAiOrchestration({
         activeRequestRef.current = null;
       }
     }
-  }, [selectedPrompt, nodes, getCurrentPlan, provider, language, mode, applyPlan, showAiFailure, beginRequest, clearNodeAiProcessingByIds, isRequestCurrent]);
+  }, [selectedPrompt, nodes, getCurrentPlan, provider, language, mode, applyPlan, showAiFailure, beginRequest, clearNodeAiProcessingByIds, isRequestCurrent, loadAiService]);
 
   const handleOptimizeSelectedNode = useCallback(async () => {
     if (!selectedNodeId) return;
@@ -421,9 +430,10 @@ export function useAiOrchestration({
     setNodesRef.current((currentNodes) => currentNodes.map((node) => node.id === selectedNodeId ? { ...node, data: { ...node.data, isAiProcessing: true } } : node));
 
     try {
+      const { modifySelectedTasks } = await loadAiService();
       const updatedPlan = await modifySelectedTasks(getCurrentPlan(), [selectedNodeId], feedback, provider, language, mode, controller.signal);
       if (!isRequestCurrent(controller, requestVersion, 'optimize-node')) return;
-      applyPlan(updatedPlan, null);
+      await applyPlan(updatedPlan, null);
       showStatusRef.current(language === 'zh' ? '节点优化已完成' : 'Node optimization completed', <CheckCircle2 className="w-3.5 h-3.5" />);
     } catch (error: any) {
       if (error.name !== 'AbortError' && isRequestCurrent(controller, requestVersion, 'optimize-node')) {
@@ -438,7 +448,7 @@ export function useAiOrchestration({
         activeRequestRef.current = null;
       }
     }
-  }, [selectedNodeId, nodes, getCurrentPlan, provider, language, mode, applyPlan, showAiFailure, beginRequest, clearNodeAiProcessingByIds, isRequestCurrent]);
+  }, [selectedNodeId, nodes, getCurrentPlan, provider, language, mode, applyPlan, showAiFailure, beginRequest, clearNodeAiProcessingByIds, isRequestCurrent, loadAiService]);
 
   const handleGenerateGroupTasks = useCallback(async () => {
     if (!selectedNodeId) return;
@@ -450,6 +460,7 @@ export function useAiOrchestration({
     setNodesRef.current((currentNodes) => currentNodes.map((item) => item.id === selectedNodeId ? { ...item, data: { ...item.data, isAiProcessing: true } } : item));
 
     try {
+      const { generateGroupTasks } = await loadAiService();
       const plan = await generateGroupTasks((node.data as TaskData).label, (node.data as TaskData).description, provider, language, mode, controller.signal);
       if (!isRequestCurrent(controller, requestVersion, 'generate-group')) return;
       const timestamp = Date.now();
@@ -510,7 +521,7 @@ export function useAiOrchestration({
         activeRequestRef.current = null;
       }
     }
-  }, [selectedNodeId, nodes, provider, language, mode, defaultPathType, connectionMode, normalizePlanNode, taskNodeLayout.groupChildGapY, taskNodeLayout.groupChildStartY, showAiFailure, beginRequest, clearNodeAiProcessingByIds, isRequestCurrent]);
+  }, [selectedNodeId, nodes, provider, language, mode, defaultPathType, connectionMode, normalizePlanNode, taskNodeLayout.groupChildGapY, taskNodeLayout.groupChildStartY, showAiFailure, beginRequest, clearNodeAiProcessingByIds, isRequestCurrent, loadAiService]);
 
   return {
     isLoading,

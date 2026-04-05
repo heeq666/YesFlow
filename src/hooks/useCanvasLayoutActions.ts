@@ -3,7 +3,6 @@ import { LayoutDashboard, Sparkles } from 'lucide-react';
 import type React from 'react';
 import type { Edge, Node } from '@xyflow/react';
 
-import { getLayoutedElements } from '../lib/flowLayout';
 import type { TaskMode } from '../types';
 
 type UseCanvasLayoutActionsParams = {
@@ -108,16 +107,22 @@ export function useCanvasLayoutActions({
 
     const selectedNodeIds = selectedNodes.map((node) => node.id);
     const selectedEdges = edges.filter((edge) => selectedNodeIds.includes(edge.source) && selectedNodeIds.includes(edge.target));
-    const layouted = getLayoutedElements(selectedNodes, selectedEdges, 'LR', mode);
 
-    const nextNodes = nodes.map((node) => {
-      const layoutedNode = (layouted.nodes as Node[]).find((candidate) => candidate.id === node.id);
-      return layoutedNode ? { ...node, position: layoutedNode.position } : node;
-    });
+    void import('../lib/flowLayout')
+      .then(({ getLayoutedElements }) => {
+        const layouted = getLayoutedElements(selectedNodes, selectedEdges, 'LR', mode);
+        const nextNodes = nodes.map((node) => {
+          const layoutedNode = (layouted.nodes as Node[]).find((candidate) => candidate.id === node.id);
+          return layoutedNode ? { ...node, position: layoutedNode.position } : node;
+        });
 
-    setNodes(nextNodes);
-    takeSnapshot(nextNodes, edges);
-    showStatus(language === 'zh' ? '局部布局完成' : 'Selection layouted', createElement(Sparkles, { className: 'w-3.5 h-3.5' }));
+        setNodes(nextNodes);
+        takeSnapshot(nextNodes, edges);
+        showStatus(language === 'zh' ? '局部布局完成' : 'Selection layouted', createElement(Sparkles, { className: 'w-3.5 h-3.5' }));
+      })
+      .catch(() => {
+        showStatus(language === 'zh' ? '布局失败，请重试' : 'Layout failed, please retry', createElement(Sparkles, { className: 'w-3.5 h-3.5' }));
+      });
   }, [nodes, edges, language, mode, setNodes, takeSnapshot, showStatus]);
 
   return {

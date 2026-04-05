@@ -3,8 +3,6 @@ import type React from 'react';
 import { MarkerType, type Edge, type Node } from '@xyflow/react';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 
-import { decomposeTask, generateGroupTasks, modifySelectedTasks } from '../services/aiService';
-import { getLayoutedElements } from '../lib/flowLayout';
 import { getTaskNodeLayout } from '../constants/taskNodeLayout';
 import type {
   AIProjectPlan,
@@ -97,6 +95,8 @@ export function useRecordNodeAiTasks({
   useEffect(() => { takeSnapshotRef.current = takeSnapshot; }, [takeSnapshot]);
   useEffect(() => { showStatusRef.current = showStatus; }, [showStatus]);
   useEffect(() => { hydrateTaskDataRef.current = hydrateTaskData; }, [hydrateTaskData]);
+  const loadAiService = useCallback(() => import('../services/aiService'), []);
+  const loadFlowLayout = useCallback(() => import('../lib/flowLayout'), []);
 
   const getAiErrorMessage = useCallback((error: unknown) => {
     if (error instanceof Error) {
@@ -150,7 +150,7 @@ export function useRecordNodeAiTasks({
     })),
   }), []);
 
-  const layoutPlanForRecord = useCallback((record: ProjectRecord, plan: AIProjectPlan) => {
+  const layoutPlanForRecord = useCallback(async (record: ProjectRecord, plan: AIProjectPlan) => {
     const allEdges: Edge[] = [];
     const edgeTimestamp = Date.now();
 
@@ -169,6 +169,7 @@ export function useRecordNodeAiTasks({
       });
     });
 
+    const { getLayoutedElements } = await loadFlowLayout();
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       plan.nodes.map((rawNode) => {
         const node = normalizePlanNode(rawNode);
@@ -194,7 +195,7 @@ export function useRecordNodeAiTasks({
       nodes: layoutedNodes as Node[],
       edges: layoutedEdges,
     };
-  }, [connectionMode, defaultPathType, mode, normalizePlanNode]);
+  }, [connectionMode, defaultPathType, mode, normalizePlanNode, loadFlowLayout]);
 
   const appendGroupTasksToRecord = useCallback((record: ProjectRecord, groupId: string, plan: AIProjectPlan) => {
     const groupNode = record.nodes.find((node) => node.id === groupId);
@@ -379,6 +380,7 @@ export function useRecordNodeAiTasks({
     const task = createRuntimeTask(record.id, selectedIds, 'modify-selected');
 
     try {
+      const { modifySelectedTasks } = await loadAiService();
       const updatedPlan = await modifySelectedTasks(
         getPlanFromRecord(record),
         selectedIds,
@@ -391,7 +393,8 @@ export function useRecordNodeAiTasks({
 
       if (!runtimeTasksRef.current[task.id] || task.controller.signal.aborted) return;
 
-      const snapshot = layoutPlanForRecord(record, updatedPlan);
+      const snapshot = await layoutPlanForRecord(record, updatedPlan);
+      if (!runtimeTasksRef.current[task.id] || task.controller.signal.aborted) return;
       applyRecordSnapshot(record.id, snapshot);
 
       if (currentRecordIdRef.current === record.id) {
@@ -429,6 +432,7 @@ export function useRecordNodeAiTasks({
     applyRecordSnapshot,
     finalizeRuntimeTask,
     formatFailureMessage,
+    loadAiService,
   ]);
 
   const handleOptimizeSelectedNode = useCallback(async () => {
@@ -444,6 +448,7 @@ export function useRecordNodeAiTasks({
       : 'Optimize the currently selected node and its directly related context to make the task clearer and the structure more coherent. Adjust nearby relationships only when truly necessary.';
 
     try {
+      const { modifySelectedTasks } = await loadAiService();
       const updatedPlan = await modifySelectedTasks(
         getPlanFromRecord(record),
         [selectedNodeId],
@@ -456,7 +461,8 @@ export function useRecordNodeAiTasks({
 
       if (!runtimeTasksRef.current[task.id] || task.controller.signal.aborted) return;
 
-      const snapshot = layoutPlanForRecord(record, updatedPlan);
+      const snapshot = await layoutPlanForRecord(record, updatedPlan);
+      if (!runtimeTasksRef.current[task.id] || task.controller.signal.aborted) return;
       applyRecordSnapshot(record.id, snapshot);
 
       if (currentRecordIdRef.current === record.id) {
@@ -494,6 +500,7 @@ export function useRecordNodeAiTasks({
     applyRecordSnapshot,
     finalizeRuntimeTask,
     formatFailureMessage,
+    loadAiService,
   ]);
 
   const handleDecompose = useCallback(async () => {
@@ -503,6 +510,7 @@ export function useRecordNodeAiTasks({
     const task = createRuntimeTask(record.id, [selectedNodeId], 'decompose-node');
 
     try {
+      const { decomposeTask } = await loadAiService();
       const updatedPlan = await decomposeTask(
         getPlanFromRecord(record),
         selectedNodeId,
@@ -515,7 +523,8 @@ export function useRecordNodeAiTasks({
 
       if (!runtimeTasksRef.current[task.id] || task.controller.signal.aborted) return;
 
-      const snapshot = layoutPlanForRecord(record, updatedPlan);
+      const snapshot = await layoutPlanForRecord(record, updatedPlan);
+      if (!runtimeTasksRef.current[task.id] || task.controller.signal.aborted) return;
       applyRecordSnapshot(record.id, snapshot);
 
       if (currentRecordIdRef.current === record.id) {
@@ -553,6 +562,7 @@ export function useRecordNodeAiTasks({
     applyRecordSnapshot,
     finalizeRuntimeTask,
     formatFailureMessage,
+    loadAiService,
   ]);
 
   const handleGenerateGroupTasks = useCallback(async () => {
@@ -565,6 +575,7 @@ export function useRecordNodeAiTasks({
     const task = createRuntimeTask(record.id, [selectedNodeId], 'generate-group');
 
     try {
+      const { generateGroupTasks } = await loadAiService();
       const plan = await generateGroupTasks(
         (recordNode.data as TaskData).label,
         (recordNode.data as TaskData).description,
@@ -624,6 +635,7 @@ export function useRecordNodeAiTasks({
     applyRecordSnapshot,
     finalizeRuntimeTask,
     formatFailureMessage,
+    loadAiService,
   ]);
 
   return {

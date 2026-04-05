@@ -15,9 +15,11 @@ export default defineConfig(({mode}) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('@xyflow/react') || id.includes('dagre')) return 'reactflow';
-            if (id.includes('motion/react')) return 'motion';
-            if (id.includes('lucide-react')) return 'icons';
+            if (id.includes('/node_modules/@xyflow/') || id.includes('/node_modules/dagre/')) return 'reactflow';
+            if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) return 'react-core';
+            if (id.includes('/node_modules/motion/')) return 'motion';
+            if (id.includes('/node_modules/lucide-react/')) return 'icons';
+            if (id.includes('/node_modules/')) return 'vendor';
             return undefined;
           },
         },
