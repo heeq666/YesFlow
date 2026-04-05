@@ -3,7 +3,7 @@ import type React from 'react';
 import type { Edge, Node } from '@xyflow/react';
 
 import type { ProjectRecord, TaskMode } from '../types';
-import { sanitizeNodeForPersistence } from '../utils/nodePersistence';
+import { sanitizeEdgesForPersistence, sanitizeNodeForPersistence } from '../utils/nodePersistence';
 
 type UseProjectRecordsParams = {
   nodes: Node[];
@@ -11,6 +11,7 @@ type UseProjectRecordsParams = {
   projectName: string;
   language: 'zh' | 'en';
   mode: TaskMode;
+  onPersistError?: (message: string) => void;
 };
 
 type BuildRecordOverrides = {
@@ -23,6 +24,62 @@ type BuildRecordOverrides = {
 };
 
 const STORAGE_KEY = 'orchestra-ai-records';
+
+function isRecordObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isNodeLike(value: unknown): value is Node {
+  return isRecordObject(value) && typeof value.id === 'string' && value.id.trim().length > 0;
+}
+
+function isEdgeLike(value: unknown): value is Edge {
+  return isRecordObject(value)
+    && typeof value.id === 'string'
+    && typeof value.source === 'string'
+    && typeof value.target === 'string';
+}
+
+function sanitizeStoredRecord(value: unknown): ProjectRecord | null {
+  if (!isRecordObject(value) || typeof value.id !== 'string' || value.id.trim().length === 0) {
+    return null;
+  }
+
+  const sanitizedNodes = Array.isArray(value.nodes)
+    ? value.nodes.filter(isNodeLike).map(sanitizeNodeForPersistence)
+    : [];
+  const sanitizedEdges = Array.isArray(value.edges)
+    ? sanitizeEdgesForPersistence(sanitizedNodes, value.edges.filter(isEdgeLike))
+    : [];
+
+  return {
+    id: value.id,
+    name: typeof value.name === 'string' && value.name.trim().length > 0 ? value.name : 'Unnamed',
+    nodes: sanitizedNodes,
+    edges: sanitizedEdges,
+    language: value.language === 'en' ? 'en' : 'zh',
+    mode: value.mode === 'daily' ? 'daily' : 'professional',
+    lastModified: typeof value.lastModified === 'number' ? value.lastModified : Date.now(),
+  };
+}
+
+function isStorageQuotaError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    : false;
+}
+
+function formatPersistErrorMessage(language: 'zh' | 'en', error: unknown) {
+  if (isStorageQuotaError(error)) {
+    return language === 'zh'
+      ? '本地记录空间不足，当前更改未能完整保存。请删除部分大图片，或先导出 JSON 备份。'
+      : 'Local record storage is full, so the latest changes could not be fully saved. Remove some large images or export a JSON backup first.';
+  }
+
+  return language === 'zh'
+    ? '本地记录保存失败，请稍后重试。'
+    : 'Saving local records failed. Please try again.';
+}
 
 function upsertRecord(
   prev: ProjectRecord[],
@@ -45,6 +102,7 @@ export function useProjectRecords({
   projectName,
   language,
   mode,
+  onPersistError,
 }: UseProjectRecordsParams) {
   const [localRecords, setLocalRecords] = useState<ProjectRecord[]>([]);
   const [currentRecordIdState, setCurrentRecordIdState] = useState<string | null>(null);
@@ -70,19 +128,37 @@ export function useProjectRecords({
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
     try {
-      setLocalRecords(JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      const normalizedRecords = Array.isArray(parsed)
+        ? parsed.map(sanitizeStoredRecord).filter((record): record is ProjectRecord => Boolean(record))
+        : [];
+      setLocalRecords(normalizedRecords);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedRecords));
+      } catch (error) {
+        console.error(error);
+      }
     } catch (error) {
       console.error(error);
     }
   }, []);
 
   const persistRecords = useCallback((updater: (prev: ProjectRecord[]) => ProjectRecord[]) => {
+    let persisted = true;
+
     setLocalRecords((prev) => {
       const next = updater(prev);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch (error) {
+        persisted = false;
+        console.error(error);
+        onPersistError?.(formatPersistErrorMessage(language, error));
+      }
       return next;
     });
-  }, []);
+    return persisted;
+  }, [language, onPersistError]);
 
   const normalizeProjectName = useCallback((name: string) => (
     name.replace(/\.(json|zip|txt)$/i, '').replace(/\s+/g, '_') || 'Unnamed'
@@ -92,12 +168,14 @@ export function useProjectRecords({
     const nextNodes = overrides.nodes ?? nodes;
     const nextEdges = overrides.edges ?? edges;
     const cleanName = normalizeProjectName(overrides.name ?? projectName);
+    const sanitizedNodes = nextNodes.map(sanitizeNodeForPersistence);
+    const sanitizedEdges = sanitizeEdgesForPersistence(sanitizedNodes, nextEdges);
 
     return {
       id: overrides.id || `rec-${Date.now()}`,
       name: cleanName,
-      nodes: nextNodes.map(sanitizeNodeForPersistence),
-      edges: nextEdges,
+      nodes: sanitizedNodes,
+      edges: sanitizedEdges,
       language: overrides.language ?? language,
       mode: overrides.mode ?? mode,
       lastModified: Date.now(),
@@ -113,9 +191,9 @@ export function useProjectRecords({
 
   const saveToLocal = useCallback(() => {
     const record = buildRecord({ id: currentRecordIdRef.current });
-    persistRecords((prev) => upsertRecord(prev, record, { insertAtFront: true }));
+    const persisted = persistRecords((prev) => upsertRecord(prev, record, { insertAtFront: true }));
     setCurrentRecordId(record.id);
-    return record;
+    return { record, persisted };
   }, [buildRecord, persistRecords, setCurrentRecordId]);
 
   const persistCurrentRecordImmediately = useCallback((options: { insertAtFront?: boolean } = {}) => {
@@ -168,11 +246,13 @@ export function useProjectRecords({
       const nextRecord = updater(record);
       if (!nextRecord) return record;
 
+      const sanitizedNodes = nextRecord.nodes.map(sanitizeNodeForPersistence);
+
       updatedRecord = {
         ...nextRecord,
         id: recordId,
-        nodes: nextRecord.nodes.map(sanitizeNodeForPersistence),
-        edges: nextRecord.edges,
+        nodes: sanitizedNodes,
+        edges: sanitizeEdgesForPersistence(sanitizedNodes, nextRecord.edges),
         lastModified: nextRecord.lastModified || Date.now(),
       };
 

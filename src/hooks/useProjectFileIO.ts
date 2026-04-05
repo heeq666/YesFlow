@@ -4,7 +4,10 @@ import type { Edge, Node } from '@xyflow/react';
 
 import { createHistory, type HistoryState } from '../utils/historyUtils';
 import type { TaskData, TaskMode } from '../types';
-import { clearTransientNodeData, sanitizeNodeForPersistence } from '../utils/nodePersistence';
+import { clearTransientNodeData, sanitizeEdgesForPersistence, sanitizeNodeForPersistence } from '../utils/nodePersistence';
+
+const EMBEDDED_IMAGE_WARNING_COUNT = 6;
+const EMBEDDED_IMAGE_WARNING_BYTES = 6 * 1024 * 1024;
 
 type HydrateNodeData = {
   language: 'zh' | 'en';
@@ -34,9 +37,56 @@ type UseProjectFileIOParams = {
   onImportSuccess?: () => void;
 };
 
-function sanitizeEdges(nodes: Node[], edges: Edge[]) {
-  const nodeIds = nodes.map((node) => node.id);
-  return edges.filter((edge) => nodeIds.includes(edge.source) && nodeIds.includes(edge.target));
+function isImportNodeLike(value: unknown): value is Node {
+  return typeof value === 'object'
+    && value !== null
+    && typeof (value as Node).id === 'string'
+    && (value as Node).id.trim().length > 0;
+}
+
+function isImportEdgeLike(value: unknown): value is Edge {
+  return typeof value === 'object'
+    && value !== null
+    && typeof (value as Edge).id === 'string'
+    && typeof (value as Edge).source === 'string'
+    && typeof (value as Edge).target === 'string';
+}
+
+function estimateDataUrlBytes(value: string) {
+  const commaIndex = value.indexOf(',');
+  if (commaIndex === -1) return 0;
+
+  const base64Payload = value.slice(commaIndex + 1);
+  const padding = base64Payload.endsWith('==') ? 2 : base64Payload.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((base64Payload.length * 3) / 4) - padding);
+}
+
+function getEmbeddedImageImportStats(nodes: Node[]) {
+  let count = 0;
+  let approxBytes = 0;
+
+  nodes.forEach((node) => {
+    const items = Array.isArray((node.data as any)?.tools?.image?.items)
+      ? (node.data as any).tools.image.items
+      : [];
+
+    items.forEach((item: any) => {
+      const source = typeof item?.src === 'string' ? item.src : '';
+      if (!/^data:image\//i.test(source)) return;
+      count += 1;
+      approxBytes += estimateDataUrlBytes(source);
+    });
+  });
+
+  return { count, approxBytes };
+}
+
+function formatEmbeddedImageImportMessage(language: 'zh' | 'en', stats: { count: number; approxBytes: number }) {
+  const approxMegabytes = (stats.approxBytes / (1024 * 1024)).toFixed(stats.approxBytes >= 10 * 1024 * 1024 ? 0 : 1);
+
+  return language === 'zh'
+    ? `导入成功，包含 ${stats.count} 张内嵌图片（约 ${approxMegabytes} MB），后续保存与切换可能会更重。`
+    : `Import succeeded with ${stats.count} embedded image(s) (about ${approxMegabytes} MB). Saving and switching may feel heavier afterwards.`;
 }
 
 export function useProjectFileIO({
@@ -63,12 +113,13 @@ export function useProjectFileIO({
       .replace(/\.(json|zip|txt)$/i, '')
       .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
       .trim() || 'YesFlow Project';
+    const sanitizedNodes = nodes.map(sanitizeNodeForPersistence);
     const exportData = {
       projectName: cleanName,
       language,
       mode,
-      nodes: nodes.map(sanitizeNodeForPersistence),
-      edges,
+      nodes: sanitizedNodes,
+      edges: sanitizeEdgesForPersistence(sanitizedNodes, edges),
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -80,26 +131,45 @@ export function useProjectFileIO({
   }, [projectName, language, mode, nodes, edges]);
 
   const importProjectContent = useCallback((content: string) => {
+    let resetDelayMs = 4000;
+
     try {
       const data = JSON.parse(content);
-      if (!data.nodes || !data.edges) throw new Error('Invalid JSON');
+      if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) throw new Error('Invalid JSON');
+      if (!data.nodes.every(isImportNodeLike) || !data.edges.every(isImportEdgeLike)) {
+        throw new Error('Invalid node or edge payload');
+      }
 
-      const hydratedNodes = data.nodes.map((node: Node) => ({
-        ...node,
-        selected: false,
-        extent: node.parentId ? undefined : node.extent,
-        data: {
-          ...clearTransientNodeData((node.data || {}) as Record<string, unknown>),
-          language: data.language || language,
-          onStatusChange: hydrateNodeData.onStatusChange,
-          onUpdateData: hydrateNodeData.onUpdateData,
-          onOpenToolPanel: hydrateNodeData.onOpenToolPanel,
-          onAddNode: (e: any, id: string, position: any) => hydrateNodeData.onAddNode(e, id, position),
-          ...(node.type === 'group' ? { onUngroup: hydrateNodeData.onUngroup } : null),
-        },
-      }));
+      const importedNodes = data.nodes as Node[];
+      const importedNodeIds = importedNodes.map((node) => node.id);
+      if (new Set(importedNodeIds).size !== importedNodeIds.length) {
+        throw new Error(language === 'zh' ? '导入文件包含重复节点 ID' : 'Imported file contains duplicate node ids');
+      }
 
-      const finalEdges = sanitizeEdges(hydratedNodes, data.edges);
+      const embeddedImageStats = getEmbeddedImageImportStats(data.nodes as Node[]);
+      const validNodeIds = new Set(importedNodeIds);
+
+      const hydratedNodes = importedNodes.map((node: Node) => {
+        const hasValidParent = typeof node.parentId === 'string' && validNodeIds.has(node.parentId);
+
+        return {
+          ...node,
+          parentId: hasValidParent ? node.parentId : undefined,
+          selected: false,
+          extent: hasValidParent ? undefined : node.extent,
+          data: {
+            ...clearTransientNodeData((node.data || {}) as Record<string, unknown>),
+            language: data.language || language,
+            onStatusChange: hydrateNodeData.onStatusChange,
+            onUpdateData: hydrateNodeData.onUpdateData,
+            onOpenToolPanel: hydrateNodeData.onOpenToolPanel,
+            onAddNode: (e: any, id: string, position: any) => hydrateNodeData.onAddNode(e, id, position),
+            ...(node.type === 'group' ? { onUngroup: hydrateNodeData.onUngroup } : null),
+          },
+        };
+      });
+
+      const finalEdges = sanitizeEdgesForPersistence(hydratedNodes, data.edges as Edge[]);
 
       if (data.projectName) setProjectName(data.projectName);
       setNodes(hydratedNodes);
@@ -108,13 +178,21 @@ export function useProjectFileIO({
       setMode(data.mode || 'professional');
       setHistory(createHistory({ nodes: hydratedNodes, edges: finalEdges }));
       setImportStatus('success');
-      setImportMessage(language === 'zh' ? '导入成功' : 'Success');
+      if (
+        embeddedImageStats.count >= EMBEDDED_IMAGE_WARNING_COUNT ||
+        embeddedImageStats.approxBytes >= EMBEDDED_IMAGE_WARNING_BYTES
+      ) {
+        setImportMessage(formatEmbeddedImageImportMessage(language, embeddedImageStats));
+        resetDelayMs = 6500;
+      } else {
+        setImportMessage(language === 'zh' ? '导入成功' : 'Success');
+      }
       onImportSuccess?.();
     } catch (error: any) {
       setImportStatus('error');
       setImportMessage(`${language === 'zh' ? '错误: ' : 'Error: '}${error.message}`);
     } finally {
-      setTimeout(() => setImportStatus('idle'), 4000);
+      setTimeout(() => setImportStatus('idle'), resetDelayMs);
     }
   }, [
     language,

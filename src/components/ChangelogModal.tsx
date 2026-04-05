@@ -10,6 +10,18 @@ export default function ChangelogModal({ onClose }: ChangelogModalProps) {
   const isDarkTheme = typeof document !== 'undefined' && document.documentElement.style.colorScheme === 'dark';
   const changelog = [
     {
+      version: "0.3.2",
+      date: "2026-04-05",
+      changes: [
+        { type: "added", text: "图片工作流升级：支持图片标题编辑、来源复制、按钮排序与拖拽排序。" },
+        { type: "added", text: "右侧资源栏可直接展示节点图片，并提供复制链接、打开原图和跳转工具区的快捷操作。" },
+        { type: "added", text: "导入 JSON 前新增轻量完整性检查，且在嵌入图片较多时给出提醒。" },
+        { type: "changed", text: "导入项目会进入新的记录上下文，不再默默覆盖此前正在编辑的项目记录。" },
+        { type: "changed", text: "本地记录与导出 JSON 的持久化清理与旧数据归一化路径进一步统一和加固。" },
+        { type: "fixed", text: "修复选择模式下顶部工具栏交互异常，并补充存储配额不足时的保存失败提示。" },
+      ]
+    },
+    {
       version: "0.3.1",
       date: "2026-04-03",
       changes: [

@@ -54,7 +54,7 @@ const DEFAULT_PROVIDERS: ApiProvider[] = [
 const DEFAULT_SETTINGS: Settings = {
   language: 'zh',
   themeMode: 'light',
-  version: '0.3.1',
+  version: '0.3.2',
   hotkeys: {
     save: 'Ctrl+S',
     export: 'Ctrl+Alt+S',
@@ -112,10 +112,10 @@ const DEFAULT_SETTINGS: Settings = {
     providers: DEFAULT_PROVIDERS,
   },
   updateNotes: [
-    '🖼️ 节点图片工具：现在可以给任务节点上传本地图片，或直接挂载线上图片链接。',
-    '🤖 项目级 AI 状态：每个项目都会保留节点生成中的状态、完成提醒与失败反馈。',
-    '💾 更干净的保存结果：项目记录和导出文件会自动清理临时运行态字段，持久化更稳定。',
-    '🛡️ 运行时兜底：新增错误边界，出现异常时优先展示错误面板，避免直接白屏。',
+    '🖼️ 图片流程升级：支持图片标题编辑、来源复制、按钮排序与拖拽排序，管理节点素材更高效。',
+    '🧰 资源栏增强：右侧资源区可直接查看节点图片，并支持复制链接、打开原图和跳转到图片工具。',
+    '🛡️ 导入更安全：导入 JSON 前会做轻量完整性检查，并在嵌入图片过多时给出提醒。',
+    '💾 持久化更稳：本地记录和导出文件统一清理临时字段，旧记录加载与保存失败提示更可靠。',
   ],
 };
 

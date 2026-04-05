@@ -17,6 +17,7 @@ interface TableToolProps {
   language: 'zh' | 'en';
   nodeData: TaskData;
   updateNodeTools: (tools: TaskData['tools']) => void;
+  onBackToOverview?: () => void;
 }
 
 export function TableToolEmpty({ language, onActivate }: { language: 'zh' | 'en'; onActivate: () => void }) {
@@ -32,7 +33,7 @@ export function TableToolEmpty({ language, onActivate }: { language: 'zh' | 'en'
   );
 }
 
-export function TableToolContent({ language, nodeData, updateNodeTools }: TableToolProps) {
+export function TableToolContent({ language, nodeData, updateNodeTools, onBackToOverview }: TableToolProps) {
   const table = nodeData.tools?.table;
   const columns = Array.isArray(table?.columns) ? table.columns : [];
   const rows = Array.isArray(table?.rows) ? table.rows : [];
@@ -50,6 +51,11 @@ export function TableToolContent({ language, nodeData, updateNodeTools }: TableT
         badge={language === 'zh' ? `${rowCount} 行 / ${columnCount} 列` : `${rowCount} rows / ${columnCount} cols`}
         actions={
           <>
+            {onBackToOverview && (
+              <NodeToolSecondaryButton accent="sky" onClick={onBackToOverview}>
+                {language === 'zh' ? '返回资源' : 'Resources'}
+              </NodeToolSecondaryButton>
+            )}
             <NodeToolSecondaryButton
               accent="sky"
               onClick={() => updateNodeTools({

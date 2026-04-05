@@ -62,21 +62,16 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-import SidebarPanel from './components/SidebarPanel';
-import RightToolSidebar from './components/RightToolSidebar';
 import SidebarToggle from './components/SidebarToggle';
-import StartDialog from './components/StartDialog';
 import StatusIndicators from './components/StatusIndicators';
 import ContextualToolbar from './components/ContextualToolbar';
 import FlowCanvas from './components/FlowCanvas';
-import ConfigModal from './components/ConfigModal';
-import ExportFileModal from './components/ExportFileModal';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import { getHelperLines, type HelperLines as HelperLinesType } from './utils/helperLineUtils';
 import { getNodeAbsolutePosition } from './utils/nodeUtils';
 import { createHistory, pushToHistory } from './utils/historyUtils';
 import { ensureToolState } from './utils/nodeTools';
-import { clearTransientNodeData } from './utils/nodePersistence';
+import { clearTransientNodeData, sanitizeEdgesForPersistence } from './utils/nodePersistence';
 import { getTaskNodeLayout } from './constants/taskNodeLayout';
 import { type ConnectionMode, type NodeStatus, type NodeToolType, type ProjectRecord, type TaskData, type TaskMode, type Settings, type NodePreset } from './types';
 import { NodeSettingsContext } from './contexts/NodeSettingsContext';
@@ -97,6 +92,11 @@ import { useRecordNodeAiTasks } from './hooks/useRecordNodeAiTasks';
 import '@xyflow/react/dist/style.css';
 
 const SettingsModal = lazy(() => import('./components/SettingsModal'));
+const SidebarPanel = lazy(() => import('./components/SidebarPanel'));
+const RightToolSidebar = lazy(() => import('./components/RightToolSidebar'));
+const StartDialog = lazy(() => import('./components/StartDialog'));
+const ConfigModal = lazy(() => import('./components/ConfigModal'));
+const ExportFileModal = lazy(() => import('./components/ExportFileModal'));
 
 type ViewportRect = {
   x: number;
@@ -279,8 +279,14 @@ export default function App() {
     projectName,
     language,
     mode,
+    onPersistError: (message) => {
+      setImportStatus('error');
+      setImportMessage(message);
+      setTimeout(() => setImportStatus('idle'), 5000);
+    },
   });
   const currentRecordIdRef = React.useRef<string | null>(currentRecordId);
+  const abortAiTaskHandlersRef = React.useRef<Record<string, (nodeId: string) => void>>({});
   const abortAiBeforeCanvasSwitchRef = React.useRef<() => void>(() => {});
   useEffect(() => {
     currentRecordIdRef.current = currentRecordId;
@@ -430,7 +436,8 @@ export default function App() {
   } as TaskData), [language, handleStatusChange, handleUpdateNodeData, handleOpenNodeToolPanel, handleNodeAdd]);
 
   const handleSaveToLocal = useCallback(() => {
-    saveToLocal();
+    const { persisted } = saveToLocal();
+    if (!persisted) return;
     setImportStatus('success');
     setImportMessage(language === 'zh' ? '已存至记录' : 'Saved to records');
     setTimeout(() => setImportStatus('idle'), 3000);
@@ -453,7 +460,7 @@ export default function App() {
 
   const ensureCurrentRecordSnapshot = useCallback(() => {
     if (currentRecordIdRef.current) {
-      const record = saveToLocal();
+      const { record } = saveToLocal();
       currentRecordIdRef.current = record.id;
       return record;
     }
@@ -502,6 +509,16 @@ export default function App() {
     updateRecord,
   });
 
+  const getAbortAiTaskHandler = useCallback((recordId: string, nodeId: string) => {
+    const cacheKey = `${recordId}:${nodeId}`;
+    if (!abortAiTaskHandlersRef.current[cacheKey]) {
+      abortAiTaskHandlersRef.current[cacheKey] = () => {
+        abortTasksForRecordNodes(recordId, [nodeId]);
+      };
+    }
+    return abortAiTaskHandlersRef.current[cacheKey];
+  }, [abortTasksForRecordNodes]);
+
   const decorateNodesWithAiState = useCallback((recordId: string | null, sourceNodes: Node[]) => {
     if (!recordId) return sourceNodes;
 
@@ -511,9 +528,14 @@ export default function App() {
     const nextNodes = sourceNodes.map((node) => {
       const nodeData = (node.data || {}) as TaskData;
       const isAiProcessing = runningNodeIds.has(node.id);
-      const hasAbortAction = Boolean(nodeData.onAbortAiTask);
+      const nextAbortAction = isAiProcessing
+        ? getAbortAiTaskHandler(recordId, node.id)
+        : undefined;
 
-      if (!isAiProcessing && !nodeData.isAiProcessing && !hasAbortAction) {
+      if (
+        nodeData.isAiProcessing === isAiProcessing &&
+        nodeData.onAbortAiTask === nextAbortAction
+      ) {
         return node;
       }
 
@@ -523,63 +545,13 @@ export default function App() {
         data: {
           ...nodeData,
           isAiProcessing,
-          onAbortAiTask: isAiProcessing
-            ? (nodeId: string) => abortTasksForRecordNodes(recordId, [nodeId])
-            : undefined,
+          onAbortAiTask: nextAbortAction,
         },
       };
     });
 
     return changed ? nextNodes : sourceNodes;
-  }, [abortTasksForRecordNodes, recordAiStates]);
-
-  const handleLoadFromLocal = useCallback((record: ProjectRecord) => {
-    abortAiBeforeCanvasSwitchRef.current();
-
-    const baseHydratedNodes = record.nodes.map((n: Node) => ({
-      ...n,
-      selected: false,
-      extent: n.parentId ? undefined : n.extent,
-      data: {
-        ...clearTransientNodeData((n.data || {}) as Record<string, unknown>),
-        language: record.language || language,
-        onStatusChange: handleStatusChange,
-        onUpdateData: handleUpdateNodeData,
-        onOpenToolPanel: handleOpenNodeToolPanel,
-        onAddNode: (e: any, id: string, pos: any) => handleNodeAdd(e, id, pos),
-        onUngroup: n.type === 'group' ? (id: string) => handleUngroup(id) : (n.data as any)?.onUngroup,
-      }
-    }));
-    const hydratedNodes = decorateNodesWithAiState(record.id, baseHydratedNodes);
-    
-    const finalNodeIds = hydratedNodes.map((n: Node) => n.id);
-    const finalEdges = record.edges.filter(e => finalNodeIds.includes(e.source) && finalNodeIds.includes(e.target));
-
-    setNodes(hydratedNodes); 
-    setEdges(finalEdges); 
-    setProjectName(record.name);
-    setLanguage(record.language); setMode(record.mode); setCurrentRecordId(record.id);
-    setHistory(createHistory({ nodes: hydratedNodes, edges: finalEdges }));
-    setShowStartDialog(false);
-    setSelectedNodeId(null); setSelectedEdgeId(null);
-
-    const recordAiState = recordAiStates[record.id];
-    if (recordAiState?.unread) {
-      if (recordAiState.latestStatus && recordAiState.latestMessage) {
-        showStatus(
-          recordAiState.latestMessage,
-          recordAiState.latestStatus === 'success'
-            ? <CheckCircle2 className="w-3.5 h-3.5" />
-            : <AlertCircle className="w-3.5 h-3.5" />,
-        );
-      }
-
-      markRecordAiStateSeen(record.id);
-    }
-
-    setImportStatus('success'); setImportMessage(language === 'zh' ? `已载入: ${record.name}` : `Loaded: ${record.name}`);
-    setTimeout(() => { setImportStatus('idle'); }, 3000);
-  }, [language, handleStatusChange, handleUpdateNodeData, handleOpenNodeToolPanel, handleNodeAdd, decorateNodesWithAiState, recordAiStates, showStatus, markRecordAiStateSeen, setNodes, setEdges, setLanguage, setMode, setProjectName, setHistory, setShowStartDialog, setCurrentRecordId]);
+  }, [getAbortAiTaskHandler, recordAiStates]);
 
   const {
     handleCopy,
@@ -634,8 +606,79 @@ export default function App() {
     isConnectionInProgress: isCanvasConnectionInProgress,
   });
 
+  const handleLoadFromLocal = useCallback((record: ProjectRecord) => {
+    abortAiBeforeCanvasSwitchRef.current();
+
+    const hydratedNodes = record.nodes.map((node: Node) => ({
+      ...node,
+      selected: false,
+      extent: node.parentId ? undefined : node.extent,
+      data: {
+        ...clearTransientNodeData((node.data || {}) as Record<string, unknown>),
+        language: record.language || language,
+        onStatusChange: handleStatusChange,
+        onUpdateData: handleUpdateNodeData,
+        onOpenToolPanel: handleOpenNodeToolPanel,
+        onAddNode: (event: React.MouseEvent, id: string, position: 'top' | 'bottom' | 'left' | 'right') =>
+          handleNodeAdd(event, id, position),
+        onUngroup: node.type === 'group'
+          ? (groupId: string) => handleUngroup(groupId)
+          : (node.data as TaskData | undefined)?.onUngroup,
+      },
+    }));
+    const finalEdges = sanitizeEdgesForPersistence(hydratedNodes, record.edges);
+
+    setNodes(hydratedNodes);
+    setEdges(finalEdges);
+    setProjectName(record.name);
+    setLanguage(record.language);
+    setMode(record.mode);
+    setCurrentRecordId(record.id);
+    setHistory(createHistory({ nodes: hydratedNodes, edges: finalEdges }));
+    setShowStartDialog(false);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setToolPanelRequest(null);
+
+    const recordAiState = recordAiStates[record.id];
+    if (recordAiState?.unread) {
+      if (recordAiState.latestStatus && recordAiState.latestMessage) {
+        showStatus(
+          recordAiState.latestMessage,
+          recordAiState.latestStatus === 'success'
+            ? <CheckCircle2 className="w-3.5 h-3.5" />
+            : <AlertCircle className="w-3.5 h-3.5" />,
+        );
+      }
+      markRecordAiStateSeen(record.id);
+    }
+
+    setImportStatus('success');
+    setImportMessage(language === 'zh' ? `已载入: ${record.name}` : `Loaded: ${record.name}`);
+    setTimeout(() => {
+      setImportStatus('idle');
+    }, 3000);
+  }, [
+    language,
+    handleStatusChange,
+    handleUpdateNodeData,
+    handleOpenNodeToolPanel,
+    handleNodeAdd,
+    handleUngroup,
+    markRecordAiStateSeen,
+    recordAiStates,
+    setCurrentRecordId,
+    setEdges,
+    setHistory,
+    setNodes,
+    showStatus,
+  ]);
+
   const handleCreateNewProject = useCallback(() => {
     abortAiBeforeCanvasSwitchRef.current();
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setToolPanelRequest(null);
     handleNewProject();
   }, [handleNewProject]);
 
@@ -656,9 +699,9 @@ export default function App() {
   }, [currentRecordId, localRecords, deleteRecord, handleLoadFromLocal, handleCreateNewProject]);
 
   const handleStartManually = useCallback(() => {
-    ensureCurrentRecord();
+    // Keep manual entry lightweight; the first real canvas change will create the record lazily.
     setShowStartDialog(false);
-  }, [ensureCurrentRecord]);
+  }, []);
 
   const handleDismissStartDialog = useCallback(() => {
     setShowStartDialog(false);
@@ -687,7 +730,13 @@ export default function App() {
     setImportStatus,
     setImportMessage,
     fileInputRef,
-    onImportSuccess: () => setShowStartDialog(false),
+    onImportSuccess: () => {
+      setCurrentRecordId(null);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setToolPanelRequest(null);
+      setShowStartDialog(false);
+    },
   });
 
   const handleLoadProjectFileWithAiReset = useCallback((file: File) => {
@@ -700,16 +749,35 @@ export default function App() {
     handleLoadFile(event);
   }, [handleLoadFile]);
 
-  useEffect(() => {
-    if (!currentRecordId) return;
-    setNodes((currentNodes) => decorateNodesWithAiState(currentRecordId, currentNodes));
-  }, [currentRecordId, decorateNodesWithAiState, recordAiStates, setNodes]);
+  const displayNodes = useMemo(
+    () => decorateNodesWithAiState(currentRecordId, nodes),
+    [currentRecordId, decorateNodesWithAiState, nodes],
+  );
 
   useEffect(() => {
+    const isJsonFile = (file: File) => /\.json$/i.test(file.name) || /^(application|text)\/json$/i.test(file.type);
+
+    const hasJsonFileCandidate = (transfer: DataTransfer) => {
+      const itemFiles = Array.from(transfer.items || [])
+        .filter((item) => item.kind === 'file')
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+
+      if (itemFiles.length > 0) {
+        return itemFiles.some(isJsonFile);
+      }
+
+      const transferFiles = Array.from(transfer.files || []);
+      return transferFiles.some(isJsonFile);
+    };
+
     const isProjectFileDrag = (transfer: DataTransfer | null) => {
       if (!transfer) return false;
       const types = Array.from(transfer.types || []);
-      return types.includes('Files');
+      // React Flow internal drags have 'application/reactflow' set — those are NOT project file imports.
+      const hasFiles = types.includes('Files');
+      const isReactFlowDrag = types.includes('application/reactflow');
+      return hasFiles && !isReactFlowDrag && hasJsonFileCandidate(transfer);
     };
 
     const resetFileDragState = () => {
@@ -739,14 +807,21 @@ export default function App() {
     };
 
     const handleDrop = (event: DragEvent) => {
-      if (!isProjectFileDrag(event.dataTransfer)) return;
+      const transfer = event.dataTransfer;
+      if (!transfer) return;
+
+      const types = Array.from(transfer.types || []);
+      const hasFiles = types.includes('Files');
+      const isReactFlowDrag = types.includes('application/reactflow');
+      if (!hasFiles || isReactFlowDrag) return;
+
+      const droppedFiles = Array.from(transfer.files || []);
+      const file = droppedFiles.find(isJsonFile);
+      if (!file) return;
+
       event.preventDefault();
-      const droppedFiles = Array.from(event.dataTransfer?.files || []);
-      const file = droppedFiles.find((item) => /\.json$/i.test(item.name) || item.type === 'application/json') || droppedFiles[0];
       resetFileDragState();
-      if (file) {
-        handleLoadProjectFileWithAiReset(file);
-      }
+      handleLoadProjectFileWithAiReset(file);
     };
 
     window.addEventListener('dragenter', handleDragEnter, true);
@@ -997,9 +1072,48 @@ export default function App() {
     setIsLmbActive,
   });
 
-  const selectedNode = nodes.find(n => n.id === selectedNodeId);
+  const handleJumpToNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    fitView({ nodes: [{ id: nodeId }], duration: 800 });
+  }, [fitView]);
+
+  const handleFlowNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setSelectedNodeId(node.id);
+    setSelectedEdgeId(null);
+    setToolPanelRequest(null);
+    setIsSidebarOpen(true);
+    setNodeClickRevealNonce((current) => current + 1);
+  }, []);
+
+  const handleFlowEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    setSelectedEdgeId(edge.id);
+    setSelectedNodeId(null);
+    setToolPanelRequest(null);
+    setIsSidebarOpen(true);
+  }, []);
+
+  const handleFlowPaneClick = useCallback(() => {
+    setNodes((currentNodes) => {
+      if (!currentNodes.some((node) => node.selected)) {
+        return currentNodes;
+      }
+      return currentNodes.map((node) => (
+        node.selected ? { ...node, selected: false } : node
+      ));
+    });
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setToolPanelRequest(null);
+  }, [setNodes]);
+
+  const handleFlowNodeDragStop = useCallback((event: unknown, node: Node) => {
+    handleNodeDragStop();
+    onNodeDragStop(event, node);
+  }, [handleNodeDragStop, onNodeDragStop]);
+
+  const selectedNode = displayNodes.find(n => n.id === selectedNodeId);
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
-  const selectedNodes = nodes.filter(n => n.selected);
+  const selectedNodes = displayNodes.filter(n => n.selected);
   const selectedNodeIds = selectedNodes.map((node) => node.id);
   const isSelectedNodeAiLoading = Boolean(selectedNodeId) && isRecordTaskRunning(currentRecordId, selectedNodeId ? [selectedNodeId] : []);
   const isSelectedBatchAiLoading = selectedNodeIds.length > 0 && isRecordTaskRunning(currentRecordId, selectedNodeIds);
@@ -1007,8 +1121,21 @@ export default function App() {
     if (!currentRecordId || selectedNodeIds.length === 0) return;
     abortTasksForRecordNodes(currentRecordId, selectedNodeIds);
   }, [abortTasksForRecordNodes, currentRecordId, selectedNodeIds]);
+  const handleGeneratingCardAnchorRectChange = useCallback((nextRect: ViewportRect | null) => {
+    setGeneratingCardTargetRect((currentRect) => {
+      if (
+        currentRect?.x === nextRect?.x &&
+        currentRect?.y === nextRect?.y &&
+        currentRect?.width === nextRect?.width &&
+        currentRect?.height === nextRect?.height
+      ) {
+        return currentRect;
+      }
+      return nextRect;
+    });
+  }, []);
   const activeEdges = useEdgeHighlighting({
-    nodes,
+    nodes: displayNodes,
     edges,
     edgeColor: settings.visuals.edgeColor,
     edgeSelectedColor: settings.visuals.edgeSelectedColor,
@@ -1055,52 +1182,51 @@ export default function App() {
           animate={{ width: isSidebarOpen ? 380 : 0 }} 
           className="flex flex-col bg-white border-r border-neutral-200 shadow-2xl overflow-hidden h-full pointer-events-auto"
         >
-          <SidebarPanel
-            language={language}
-            themeMode={themeMode}
-            isBatchAiLoading={isSelectedBatchAiLoading}
-            hasApiKey={hasApiKey}
-            activeProviderName={activeProviderName}
-            settings={settings}
-            selectedNode={selectedNode}
-            selectedEdge={selectedEdge}
-            selectedNodes={selectedNodes}
-            selectedPrompt={selectedPrompt}
-            localRecords={localRecords}
-            currentRecordId={currentRecordId}
-            nodes={nodes}
-            edges={edges}
-            mode={mode}
-            onNewProject={handleCreateNewProject}
-            onDeleteSelectedEdge={handleDeleteSelectedEdge}
-            onUpdateSelectedEdgeLabel={handleUpdateSelectedEdgeLabel}
-            onUpdateSelectedEdgeColor={handleUpdateSelectedEdgeColor}
-            onDeleteSelectedNode={handleDeleteNodeLocal}
-            onUpdateNodeData={handleUpdateNodeData}
-            onStatusChange={handleStatusChange}
-            onJumpToNode={(nodeId) => {
-              setSelectedNodeId(nodeId);
-              fitView({ nodes: [{ id: nodeId }], duration: 800 });
-            }}
-            onSelectedPromptChange={setSelectedPrompt}
-            onModifySelected={handleModifySelected}
-            onAbortSelectedAi={handleAbortSelectedNodeAi}
-            onAbortPlanGeneration={handleAbortPlanGeneration}
-            onLoadRecord={handleLoadFromLocal}
-            onDeleteRecord={handleDeleteRecord}
-            onReorderRecords={reorderRecords}
-            onSelectProvider={handleSelectProvider}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onToggleTheme={toggleTheme}
-            onToggleLanguage={toggleLanguage}
-            isGeneratingPlan={isGeneratingPlan}
-            isGeneratingPlanCompleting={isGeneratingPlanCompleting}
-            generatingRecordId={generatingRecordId}
-            streamingContent={streamingContent}
-            hideGeneratingRecord={hideGeneratingRecord}
-            onGeneratingCardAnchorRectChange={setGeneratingCardTargetRect}
-            recordAiStates={recordAiStates}
-          />
+          <Suspense fallback={null}>
+            <SidebarPanel
+              language={language}
+              themeMode={themeMode}
+              isBatchAiLoading={isSelectedBatchAiLoading}
+              hasApiKey={hasApiKey}
+              activeProviderName={activeProviderName}
+              settings={settings}
+              selectedNode={selectedNode}
+              selectedEdge={selectedEdge}
+              selectedNodes={selectedNodes}
+              selectedPrompt={selectedPrompt}
+              localRecords={localRecords}
+              currentRecordId={currentRecordId}
+              nodes={displayNodes}
+              edges={edges}
+              mode={mode}
+              onNewProject={handleCreateNewProject}
+              onDeleteSelectedEdge={handleDeleteSelectedEdge}
+              onUpdateSelectedEdgeLabel={handleUpdateSelectedEdgeLabel}
+              onUpdateSelectedEdgeColor={handleUpdateSelectedEdgeColor}
+              onDeleteSelectedNode={handleDeleteNodeLocal}
+              onUpdateNodeData={handleUpdateNodeData}
+              onStatusChange={handleStatusChange}
+              onJumpToNode={handleJumpToNode}
+              onSelectedPromptChange={setSelectedPrompt}
+              onModifySelected={handleModifySelected}
+              onAbortSelectedAi={handleAbortSelectedNodeAi}
+              onAbortPlanGeneration={handleAbortPlanGeneration}
+              onLoadRecord={handleLoadFromLocal}
+              onDeleteRecord={handleDeleteRecord}
+              onReorderRecords={reorderRecords}
+              onSelectProvider={handleSelectProvider}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onToggleTheme={toggleTheme}
+              onToggleLanguage={toggleLanguage}
+              isGeneratingPlan={isGeneratingPlan}
+              isGeneratingPlanCompleting={isGeneratingPlanCompleting}
+              generatingRecordId={generatingRecordId}
+              streamingContent={streamingContent}
+              hideGeneratingRecord={hideGeneratingRecord}
+              onGeneratingCardAnchorRectChange={showStartDialog ? handleGeneratingCardAnchorRectChange : undefined}
+              recordAiStates={recordAiStates}
+            />
+          </Suspense>
         </motion.aside>
         <SidebarToggle
           isSidebarOpen={isSidebarOpen}
@@ -1110,50 +1236,49 @@ export default function App() {
       </div>
 
       <div className="absolute inset-y-0 right-0 z-40 pointer-events-none flex flex-row items-stretch">
-        <RightToolSidebar
-          language={language}
-          settings={settings}
-          selectedNode={selectedNode}
-          nodeClickRevealNonce={nodeClickRevealNonce}
-          toolPanelRequest={toolPanelRequest}
-          nodes={nodes}
-          edges={edges}
-          onUpdateNodeData={handleUpdateNodeData}
-          onPanelWidthChange={(width) => {
-            setSettings((current) => ({
-              ...current,
-              nodeTools: {
-                ...current.nodeTools,
-                panelWidth: width,
-              },
-            }));
-          }}
-          onCalendarCollapsedChange={(collapsed) => {
-            setSettings((current) => ({
-              ...current,
-              nodeTools: {
-                ...current.nodeTools,
-                calendar: {
-                  ...current.nodeTools.calendar,
-                  collapsed,
+        <Suspense fallback={null}>
+          <RightToolSidebar
+            language={language}
+            settings={settings}
+            selectedNode={selectedNode}
+            nodeClickRevealNonce={nodeClickRevealNonce}
+            toolPanelRequest={toolPanelRequest}
+            nodes={displayNodes}
+            edges={edges}
+            onUpdateNodeData={handleUpdateNodeData}
+            onPanelWidthChange={(width) => {
+              setSettings((current) => ({
+                ...current,
+                nodeTools: {
+                  ...current.nodeTools,
+                  panelWidth: width,
                 },
-              },
-            }));
-          }}
-          onToggleVisibility={(visible) => {
-            setSettings((current) => ({
-              ...current,
-              nodeTools: {
-                ...current.nodeTools,
-                enabled: visible,
-              },
-            }));
-          }}
-          onJumpToNode={(nodeId) => {
-            setSelectedNodeId(nodeId);
-            fitView({ nodes: [{ id: nodeId }], duration: 800 });
-          }}
-        />
+              }));
+            }}
+            onCalendarCollapsedChange={(collapsed) => {
+              setSettings((current) => ({
+                ...current,
+                nodeTools: {
+                  ...current.nodeTools,
+                  calendar: {
+                    ...current.nodeTools.calendar,
+                    collapsed,
+                  },
+                },
+              }));
+            }}
+            onToggleVisibility={(visible) => {
+              setSettings((current) => ({
+                ...current,
+                nodeTools: {
+                  ...current.nodeTools,
+                  enabled: visible,
+                },
+              }));
+            }}
+            onJumpToNode={handleJumpToNode}
+          />
+        </Suspense>
       </div>
 
       <NodeSettingsContext.Provider value={useMemo(() => ({
@@ -1166,7 +1291,7 @@ export default function App() {
         <FlowCanvas
           selectionBox={selectionBox}
           transform={store.getState().transform}
-          nodes={nodes}
+          nodes={displayNodes}
           activeEdges={activeEdges}
           helperLines={helperLines}
           mode={mode}
@@ -1179,25 +1304,9 @@ export default function App() {
           onConnect={onConnect}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
-          onNodeClick={(_, node) => {
-            setSelectedNodeId(node.id);
-            setSelectedEdgeId(null);
-            setToolPanelRequest(null);
-            setIsSidebarOpen(true);
-            setNodeClickRevealNonce((current) => current + 1);
-          }}
-          onEdgeClick={(_, edge) => {
-            setSelectedEdgeId(edge.id);
-            setSelectedNodeId(null);
-            setToolPanelRequest(null);
-            setIsSidebarOpen(true);
-          }}
-          onPaneClick={() => {
-            setNodes((currentNodes) => currentNodes.map((node) => ({ ...node, selected: false })));
-            setSelectedNodeId(null);
-            setSelectedEdgeId(null);
-            setToolPanelRequest(null);
-          }}
+          onNodeClick={handleFlowNodeClick}
+          onEdgeClick={handleFlowEdgeClick}
+          onPaneClick={handleFlowPaneClick}
           onDrop={onDrop}
           onDragOver={onDragOver}
           selectionKeyCode={interactionConfig.selectionKeyCode}
@@ -1208,10 +1317,7 @@ export default function App() {
           onSelectionEnd={handleSelectionEnd}
           onNodeDragStart={handleNodeDragStart}
           onNodeDrag={onNodeDrag}
-          onNodeDragStop={(event, node) => {
-            handleNodeDragStop();
-            onNodeDragStop(event, node);
-          }}
+          onNodeDragStop={handleFlowNodeDragStop}
           currentProjectLabel={t.currentProject}
           projectName={projectName}
           onProjectNameChange={setProjectName}
@@ -1298,45 +1404,51 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <StartDialog
-        visible={showStartDialog}
-        language={language}
-        mode={mode}
-        prompt={prompt}
-        isLoading={isPlanLoading}
-        title={t.startQuestion}
-        placeholder={t.placeholderEmpty}
-        dailyModeLabel={t.dailyMode}
-        professionalModeLabel={t.professionalMode}
-        generateLabel={t.generateButton}
-        manualModeLabel={t.manualMode}
-        onModeChange={setMode}
-        onPromptChange={setPrompt}
-        onPrepareGenerate={handlePrepareGenerate}
-        targetRecordRect={generatingCardTargetRect}
-        onGenerate={handleGenerateWithRecord}
-        onAbort={handleAbortPlanGeneration}
-        onManualStart={handleStartManually}
-        onDismiss={handleDismissStartDialog}
-      />
+      <Suspense fallback={null}>
+        <StartDialog
+          visible={showStartDialog}
+          language={language}
+          mode={mode}
+          prompt={prompt}
+          isLoading={isPlanLoading}
+          title={t.startQuestion}
+          placeholder={t.placeholderEmpty}
+          dailyModeLabel={t.dailyMode}
+          professionalModeLabel={t.professionalMode}
+          generateLabel={t.generateButton}
+          manualModeLabel={t.manualMode}
+          onModeChange={setMode}
+          onPromptChange={setPrompt}
+          onPrepareGenerate={handlePrepareGenerate}
+          targetRecordRect={generatingCardTargetRect}
+          onGenerate={handleGenerateWithRecord}
+          onAbort={handleAbortPlanGeneration}
+          onManualStart={handleStartManually}
+          onDismiss={handleDismissStartDialog}
+        />
+      </Suspense>
 
-      <ExportFileModal
-        visible={isExportFileModalOpen}
-        language={language}
-        fileName={exportFileName}
-        onFileNameChange={setExportFileName}
-        onConfirm={handleConfirmExportFile}
-        onClose={() => setIsExportFileModalOpen(false)}
-      />
+      <Suspense fallback={null}>
+        <ExportFileModal
+          visible={isExportFileModalOpen}
+          language={language}
+          fileName={exportFileName}
+          onFileNameChange={setExportFileName}
+          onConfirm={handleConfirmExportFile}
+          onClose={() => setIsExportFileModalOpen(false)}
+        />
+      </Suspense>
 
-      <ConfigModal
-        visible={isConfigModalOpen}
-        language={language}
-        settings={settings}
-        onUpdateSettings={setSettings}
-        onClose={() => setIsConfigModalOpen(false)}
-        onSkip={() => { setIsConfigModalOpen(false); setShowStartDialog(false); }}
-      />
+      <Suspense fallback={null}>
+        <ConfigModal
+          visible={isConfigModalOpen}
+          language={language}
+          settings={settings}
+          onUpdateSettings={setSettings}
+          onClose={() => setIsConfigModalOpen(false)}
+          onSkip={() => { setIsConfigModalOpen(false); setShowStartDialog(false); }}
+        />
+      </Suspense>
       </div>
     </AppErrorBoundary>
   );

@@ -191,9 +191,11 @@ export default function TopToolbar({
         <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl">
           <button
             onClick={onToggleCanvasGrid}
+            aria-pressed={showCanvasGrid}
             title={showCanvasGrid ? (language === 'zh' ? '隐藏网格' : 'Hide grid') : (language === 'zh' ? '显示网格' : 'Show grid')}
+            style={{ pointerEvents: 'auto' }}
             className={`p-1.5 rounded-lg transition-all ${
-              showCanvasGrid ? 'bg-white text-primary shadow-sm' : 'text-neutral-400 hover:text-neutral-600'
+              showCanvasGrid ? 'bg-white text-primary shadow-sm ring-1 ring-primary/10' : 'text-neutral-400 hover:text-neutral-600'
             }`}
           >
             <Grid2x2 className="w-3.5 h-3.5" />

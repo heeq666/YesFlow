@@ -10,6 +10,7 @@ import {
 } from '../utils/nodeTools';
 import {
   NodeToolEmptyState,
+  NodeToolSecondaryButton,
   NodeToolSection,
   NodeToolWorkspaceHeader,
 } from './NodeToolSurface';
@@ -18,6 +19,7 @@ interface LinkToolProps {
   language: 'zh' | 'en';
   nodeData: TaskData;
   updateNodeTools: (tools: TaskData['tools']) => void;
+  onBackToOverview?: () => void;
 }
 
 export function LinkToolEmpty({
@@ -39,7 +41,7 @@ export function LinkToolEmpty({
   );
 }
 
-export function LinkToolContent({ language, nodeData, updateNodeTools }: LinkToolProps) {
+export function LinkToolContent({ language, nodeData, updateNodeTools, onBackToOverview }: LinkToolProps) {
   const linkTool = nodeData.tools?.link;
   const items = Array.isArray(linkTool?.items) ? linkTool.items : [];
   const [draftUrl, setDraftUrl] = React.useState('');
@@ -146,6 +148,13 @@ export function LinkToolContent({ language, nodeData, updateNodeTools }: LinkToo
         title={language === 'zh' ? '只填链接，名字会自动补齐。' : 'Paste a link and let the name fill itself in.'}
         description={language === 'zh' ? '新增时只需要 URL；已添加的链接可以直接改，右侧随时访问。' : 'New links only need a URL. Existing links stay editable with quick access on the right.'}
         badge={language === 'zh' ? `${items.length} 条入口` : `${items.length} resources`}
+        actions={
+          onBackToOverview ? (
+            <NodeToolSecondaryButton accent="violet" onClick={onBackToOverview}>
+              {language === 'zh' ? '返回资源' : 'Resources'}
+            </NodeToolSecondaryButton>
+          ) : undefined
+        }
       />
 
       <div className="space-y-3">

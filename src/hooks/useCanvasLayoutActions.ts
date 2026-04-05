@@ -45,8 +45,8 @@ export function useCanvasLayoutActions({
         return {
           ...node,
           position: {
-            x: direction === 'horizontal' ? centerX - nodeWidth / 2 : node.position.x,
-            y: direction === 'vertical' ? centerY - nodeHeight / 2 : node.position.y,
+            x: direction === 'vertical' ? centerX - nodeWidth / 2 : node.position.x,
+            y: direction === 'horizontal' ? centerY - nodeHeight / 2 : node.position.y,
           },
         };
       });

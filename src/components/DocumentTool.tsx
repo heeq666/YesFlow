@@ -4,6 +4,7 @@ import type { TaskData } from '../types';
 import {
   NodeToolEmptyState,
   NodeToolFieldLabel,
+  NodeToolSecondaryButton,
   NodeToolSection,
   NodeToolWorkspaceHeader,
 } from './NodeToolSurface';
@@ -12,6 +13,7 @@ interface DocumentToolProps {
   language: 'zh' | 'en';
   nodeData: TaskData;
   updateNodeTools: (tools: TaskData['tools']) => void;
+  onBackToOverview?: () => void;
 }
 
 export function DocumentToolEmpty({ language, onActivate }: { language: 'zh' | 'en'; onActivate: () => void }) {
@@ -27,7 +29,7 @@ export function DocumentToolEmpty({ language, onActivate }: { language: 'zh' | '
   );
 }
 
-export function DocumentToolContent({ language, nodeData, updateNodeTools }: DocumentToolProps) {
+export function DocumentToolContent({ language, nodeData, updateNodeTools, onBackToOverview }: DocumentToolProps) {
   const documentTool = nodeData.tools?.document;
   const characterCount = (documentTool?.content || '').trim().length;
 
@@ -40,6 +42,13 @@ export function DocumentToolContent({ language, nodeData, updateNodeTools }: Doc
         description={language === 'zh' ? '文档区更适合持续书写，而不是碎片化备注。' : 'This space is for sustained writing, not scattered notes.'}
         badge={language === 'zh' ? `${characterCount} 字` : `${characterCount} chars`}
         meta={language === 'zh' ? '内容会跟随当前节点一起保存。' : 'Content is saved together with the current node.'}
+        actions={
+          onBackToOverview ? (
+            <NodeToolSecondaryButton accent="emerald" onClick={onBackToOverview}>
+              {language === 'zh' ? '返回资源' : 'Resources'}
+            </NodeToolSecondaryButton>
+          ) : undefined
+        }
       />
       <NodeToolSection>
         <div className="space-y-2">

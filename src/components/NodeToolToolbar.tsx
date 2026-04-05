@@ -1,8 +1,13 @@
 import React from 'react';
 import { NodeToolbar, Position } from '@xyflow/react';
 import {
+  ArrowDown,
+  ArrowUp,
   ArrowUpRight,
+  Check,
+  Copy,
   ExternalLink,
+  GripVertical,
   Plus,
   Upload,
   X,
@@ -22,6 +27,7 @@ import {
 import { NodeSettingsContext } from '../contexts/NodeSettingsContext';
 import type { NodeToolType, ScheduleTimeType, TaskData } from '../types';
 import {
+  MAX_NODE_IMAGE_FILE_BYTES,
   SCHEDULE_TIME_TYPE_OPTIONS,
   createEmptyLinkItem,
   createImageItem,
@@ -31,9 +37,12 @@ import {
   fetchNodeLinkTitle,
   getNodeToolImages,
   getScheduleTimeTypeDefaultLabel,
+  moveItemById,
+  moveItemToTargetId,
   normalizeNodeImageSource,
   normalizeNodeLinkUrl,
 } from '../utils/nodeTools';
+import { copyTextToClipboard } from '../utils/clipboard';
 
 type NodeToolToolbarProps = {
   id: string;
@@ -142,7 +151,15 @@ export default function NodeToolToolbar({
   const [openingTool, setOpeningTool] = React.useState<NodeToolType | null>(null);
   const [documentDraft, setDocumentDraft] = React.useState('');
   const [imageUrlDraft, setImageUrlDraft] = React.useState('');
+  const [copiedImageId, setCopiedImageId] = React.useState<string | null>(null);
+  const [draggingImageId, setDraggingImageId] = React.useState<string | null>(null);
+  const [dropTargetImageId, setDropTargetImageId] = React.useState<string | null>(null);
+  const [imageUploadFeedback, setImageUploadFeedback] = React.useState<string | null>(null);
+  const [previewImage, setPreviewImage] = React.useState<{ src: string; title: string; alt: string } | null>(null);
+  const [previewZoom, setPreviewZoom] = React.useState(1);
   const openingTimerRef = React.useRef<number | null>(null);
+  const imageCopyTimerRef = React.useRef<number | null>(null);
+  const imageFeedbackTimerRef = React.useRef<number | null>(null);
   const linkInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
   const pendingLinkFocusIdRef = React.useRef<string | null>(null);
   const linkRequestControllersRef = React.useRef<Record<string, AbortController>>({});
@@ -163,6 +180,7 @@ export default function NodeToolToolbar({
       }
       setOpeningTool(null);
       setActiveTool(null);
+      setPreviewImage(null);
       return;
     }
 
@@ -179,6 +197,12 @@ export default function NodeToolToolbar({
     return () => {
       if (openingTimerRef.current) {
         window.clearTimeout(openingTimerRef.current);
+      }
+      if (imageCopyTimerRef.current) {
+        window.clearTimeout(imageCopyTimerRef.current);
+      }
+      if (imageFeedbackTimerRef.current) {
+        window.clearTimeout(imageFeedbackTimerRef.current);
       }
       for (const controller of Object.values(linkRequestControllersRef.current) as AbortController[]) {
         controller.abort();
@@ -210,6 +234,10 @@ export default function NodeToolToolbar({
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
+      if (previewImage) {
+        setPreviewImage(null);
+        return;
+      }
       if (activeTool) {
         commitQuickDraft(activeTool);
         setActiveTool(null);
@@ -220,7 +248,12 @@ export default function NodeToolToolbar({
 
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [activeTool, onClose, visible]);
+  }, [activeTool, onClose, previewImage, visible]);
+
+  React.useEffect(() => {
+    if (!previewImage) return;
+    setPreviewZoom(1);
+  }, [previewImage]);
 
   React.useEffect(() => {
     if (!quickToolRequest || !selected) return;
@@ -388,6 +421,73 @@ export default function NodeToolToolbar({
     });
   };
 
+  const queueImageCopyFeedback = (itemId: string) => {
+    if (imageCopyTimerRef.current) {
+      window.clearTimeout(imageCopyTimerRef.current);
+    }
+
+    setCopiedImageId(itemId);
+    imageCopyTimerRef.current = window.setTimeout(() => {
+      setCopiedImageId((current) => (current === itemId ? null : current));
+      imageCopyTimerRef.current = null;
+    }, 1600);
+  };
+
+  const updateImageItemTitle = (itemId: string, title: string) => {
+    const currentData = dataRef.current;
+    const imageItems = getNodeToolImages(currentData.tools?.image);
+    const cleanedTitle = title.replace(/\s+/g, ' ').trimStart();
+
+    updateImageItems(imageItems.map((item) => (
+      item.id === itemId
+        ? {
+            ...item,
+            title: cleanedTitle,
+            alt: !item.alt || item.alt === item.title ? cleanedTitle : item.alt,
+          }
+        : item
+    )));
+  };
+
+  const handleCopyImageSource = async (itemId: string, source: string) => {
+    const copied = await copyTextToClipboard(source);
+    if (!copied) return;
+    queueImageCopyFeedback(itemId);
+  };
+
+  const pushImageUploadFeedback = (message: string | null) => {
+    if (imageFeedbackTimerRef.current) {
+      window.clearTimeout(imageFeedbackTimerRef.current);
+      imageFeedbackTimerRef.current = null;
+    }
+
+    setImageUploadFeedback(message);
+
+    if (!message) return;
+
+    imageFeedbackTimerRef.current = window.setTimeout(() => {
+      setImageUploadFeedback(null);
+      imageFeedbackTimerRef.current = null;
+    }, 3200);
+  };
+
+  const moveImageItem = (itemId: string, direction: -1 | 1) => {
+    const currentData = dataRef.current;
+    const imageItems = getNodeToolImages(currentData.tools?.image);
+    updateImageItems(moveItemById(imageItems, itemId, direction));
+  };
+
+  const reorderImageItem = (itemId: string, targetId: string) => {
+    const currentData = dataRef.current;
+    const imageItems = getNodeToolImages(currentData.tools?.image);
+    updateImageItems(moveItemToTargetId(imageItems, itemId, targetId));
+  };
+
+  const resetImageDragState = () => {
+    setDraggingImageId(null);
+    setDropTargetImageId(null);
+  };
+
   const addImageFromUrl = () => {
     const normalizedSource = normalizeNodeImageSource(imageUrlDraft);
     if (!normalizedSource) return;
@@ -413,8 +513,19 @@ export default function NodeToolToolbar({
   const handleImageFileChange = async (fileList: FileList | null) => {
     const files = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'));
     if (files.length === 0) return;
+    const acceptedFiles = files.filter((file) => file.size <= MAX_NODE_IMAGE_FILE_BYTES);
+    const rejectedCount = files.length - acceptedFiles.length;
 
-    const nextItems = await Promise.all(files.map((file) => (
+    if (acceptedFiles.length === 0) {
+      pushImageUploadFeedback(
+        language === 'zh'
+          ? `${rejectedCount || files.length} 张图片超过 15MB，已跳过，请先压缩后再上传。`
+          : `${rejectedCount || files.length} image(s) were larger than 15 MB and were skipped. Please compress them first.`,
+      );
+      return;
+    }
+
+    const nextItems = await Promise.all(acceptedFiles.map((file) => (
       new Promise<ReturnType<typeof createImageItem>>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -430,6 +541,13 @@ export default function NodeToolToolbar({
     const currentData = dataRef.current;
     const imageItems = getNodeToolImages(currentData.tools?.image);
     updateImageItems([...imageItems, ...nextItems], true);
+    pushImageUploadFeedback(
+      rejectedCount > 0
+        ? (language === 'zh'
+            ? `${rejectedCount} 张图片超过 15MB，已跳过，请先压缩后再上传。`
+            : `${rejectedCount} image(s) were larger than 15 MB and were skipped. Please compress them first.`)
+        : null,
+    );
   };
 
   const addScheduleItemQuick = () => {
@@ -502,9 +620,19 @@ export default function NodeToolToolbar({
       window.clearTimeout(openingTimerRef.current);
       openingTimerRef.current = null;
     }
+    setPreviewImage(null);
     setOpeningTool(null);
     commitQuickDraft(activeTool);
     setActiveTool(null);
+  };
+
+  const handlePreviewWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.12 : 0.88;
+    setPreviewZoom((current) => {
+      const next = current * factor;
+      return Math.min(4, Math.max(0.5, Number(next.toFixed(3))));
+    });
   };
 
   const insertDocumentSnippet = (snippet: string) => {
@@ -946,18 +1074,84 @@ export default function NodeToolToolbar({
           </button>
         </div>
 
+        {imageUploadFeedback && (
+          <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-5 text-amber-700">
+            {imageUploadFeedback}
+          </div>
+        )}
+
         {images.length > 0 ? (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {images.map((item, index) => (
-              <div key={item.id} className="overflow-hidden rounded-[16px] border border-neutral-200 bg-white">
-                <div className="relative aspect-square overflow-hidden bg-neutral-50">
+              <div
+                key={item.id}
+                onDragOver={(event) => {
+                  if (!draggingImageId || draggingImageId === item.id) return;
+                  event.preventDefault();
+                  setDropTargetImageId(item.id);
+                }}
+                onDrop={(event) => {
+                  if (!draggingImageId || draggingImageId === item.id) return;
+                  event.preventDefault();
+                  reorderImageItem(draggingImageId, item.id);
+                  resetImageDragState();
+                }}
+                onDragEnd={resetImageDragState}
+                className={`overflow-hidden rounded-[16px] border bg-white transition-all ${
+                  dropTargetImageId === item.id && draggingImageId !== item.id
+                    ? 'border-rose-200 ring-2 ring-rose-200'
+                    : 'border-neutral-200'
+                } ${draggingImageId === item.id ? 'opacity-70' : ''}`}
+              >
+                <div className="group relative aspect-square overflow-hidden bg-neutral-50">
                   <img
                     src={item.src}
                     alt={item.alt || item.title}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full cursor-zoom-in object-cover"
+                    onClick={() => setPreviewImage({
+                      src: item.src,
+                      title: item.title,
+                      alt: item.alt || item.title,
+                    })}
                     loading="lazy"
                   />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 via-black/20 to-transparent px-2.5 py-2 text-[9px] font-black uppercase tracking-[0.14em] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    {language === 'zh' ? '点击看大图' : 'View large'}
+                  </div>
                   <div className="absolute right-2 top-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(event) => {
+                        setDraggingImageId(item.id);
+                        setDropTargetImageId(item.id);
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', item.id);
+                      }}
+                      onDragEnd={resetImageDragState}
+                      className="flex h-7 w-7 cursor-grab items-center justify-center rounded-full bg-white/92 text-neutral-400 shadow-sm transition-all hover:text-rose-600 active:cursor-grabbing"
+                      title={language === 'zh' ? '拖拽排序' : 'Drag to reorder'}
+                    >
+                      <GripVertical className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveImageItem(item.id, -1)}
+                      disabled={index === 0}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/92 text-neutral-400 shadow-sm transition-all hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={language === 'zh' ? '上移图片' : 'Move image up'}
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveImageItem(item.id, 1)}
+                      disabled={index === images.length - 1}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/92 text-neutral-400 shadow-sm transition-all hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={language === 'zh' ? '下移图片' : 'Move image down'}
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => window.open(item.src, '_blank', 'noopener,noreferrer')}
@@ -965,6 +1159,18 @@ export default function NodeToolToolbar({
                       title={language === 'zh' ? '打开图片' : 'Open image'}
                     >
                       <ExternalLink className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyImageSource(item.id, item.src)}
+                      className={`flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-all ${
+                        copiedImageId === item.id
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : 'bg-white/92 text-neutral-500 hover:text-rose-600'
+                      }`}
+                      title={language === 'zh' ? '复制图片来源' : 'Copy image source'}
+                    >
+                      {copiedImageId === item.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                     </button>
                     <button
                       type="button"
@@ -976,9 +1182,22 @@ export default function NodeToolToolbar({
                     </button>
                   </div>
                 </div>
-                <div className="px-2.5 py-2">
-                  <div className="truncate text-[11px] font-black text-neutral-800">
-                    {item.title || (language === 'zh' ? `图片 ${index + 1}` : `Image ${index + 1}`)}
+                <div className="space-y-2 px-2.5 py-2">
+                  <input
+                    type="text"
+                    value={item.title}
+                    onChange={(event) => updateImageItemTitle(item.id, event.target.value)}
+                    placeholder={language === 'zh' ? `图片 ${index + 1}` : `Image ${index + 1}`}
+                    className="min-w-0 w-full rounded-[12px] border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-[11px] font-bold text-neutral-800 outline-none transition-all focus:border-rose-200 focus:bg-white"
+                  />
+                  <div className="text-[9px] font-black uppercase tracking-[0.14em] text-neutral-400">
+                    {draggingImageId === item.id
+                      ? (language === 'zh' ? '拖拽中' : 'Dragging')
+                      : copiedImageId === item.id
+                        ? (language === 'zh' ? '来源已复制' : 'Source copied')
+                        : /^https?:\/\//i.test(item.src)
+                          ? (language === 'zh' ? '外链图片' : 'Remote image')
+                          : (language === 'zh' ? '本地嵌入' : 'Embedded image')}
                   </div>
                 </div>
               </div>
@@ -1120,7 +1339,7 @@ export default function NodeToolToolbar({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className={`app-shell fixed inset-0 z-[1200] flex items-end justify-center p-4 sm:items-center sm:p-8 ${
+                className={`app-shell fixed inset-0 z-[3100] flex items-end justify-center p-4 sm:items-center sm:p-8 ${
                   isDarkTheme ? 'theme-dark' : 'theme-light'
                 }`}
                 onClick={closeQuickTool}
@@ -1132,6 +1351,53 @@ export default function NodeToolToolbar({
                   exit={{ opacity: 0 }}
                 />
                 {renderQuickTool()}
+                {previewImage && (
+                  <div
+                    className="absolute inset-0 z-[20] overflow-auto bg-black/75"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPreviewImage(null);
+                    }}
+                    onWheelCapture={handlePreviewWheel}
+                    role="presentation"
+                  >
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPreviewImage(null);
+                      }}
+                      className="fixed right-6 top-6 z-[26] inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75"
+                      title={language === 'zh' ? '关闭预览' : 'Close preview'}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="min-h-full min-w-full p-4 sm:p-8">
+                      <div className="flex min-h-[calc(100vh-2rem)] items-center justify-center sm:min-h-[calc(100vh-4rem)]">
+                        <div
+                          className="relative inline-flex flex-col items-center"
+                          onClick={(event) => event.stopPropagation()}
+                          role="presentation"
+                        >
+                          <img
+                            src={previewImage.src}
+                            alt={previewImage.alt}
+                            className="rounded-2xl border border-white/20 object-contain shadow-[0_40px_120px_-40px_rgba(0,0,0,0.75)]"
+                            style={{
+                              maxHeight: '88vh',
+                              maxWidth: '90vw',
+                              transform: `scale(${previewZoom})`,
+                              transformOrigin: 'center center',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pointer-events-none fixed bottom-6 left-1/2 z-[25] -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-[11px] font-semibold text-white/90 backdrop-blur-sm">
+                      {`${previewImage.title} · ${language === 'zh' ? `缩放 ${Math.round(previewZoom * 100)}%（滚轮）` : `Zoom ${Math.round(previewZoom * 100)}% (wheel)`}`}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>,

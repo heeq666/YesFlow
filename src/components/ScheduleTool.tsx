@@ -22,6 +22,7 @@ interface ScheduleToolProps {
   language: 'zh' | 'en';
   nodeData: TaskData;
   updateNodeTools: (tools: TaskData['tools']) => void;
+  onBackToOverview?: () => void;
 }
 
 export function ScheduleToolEmpty({ language, onActivate }: { language: 'zh' | 'en'; onActivate: () => void }) {
@@ -37,7 +38,7 @@ export function ScheduleToolEmpty({ language, onActivate }: { language: 'zh' | '
   );
 }
 
-export function ScheduleToolContent({ language, nodeData, updateNodeTools }: ScheduleToolProps) {
+export function ScheduleToolContent({ language, nodeData, updateNodeTools, onBackToOverview }: ScheduleToolProps) {
   const schedule = nodeData.tools?.schedule;
   const items = Array.isArray(schedule?.items) ? schedule.items : [];
 
@@ -91,6 +92,11 @@ export function ScheduleToolContent({ language, nodeData, updateNodeTools }: Sch
         badge={language === 'zh' ? `${items.length} 项` : `${items.length} items`}
         actions={
           <>
+            {onBackToOverview && (
+              <NodeToolSecondaryButton accent="amber" onClick={onBackToOverview}>
+                {language === 'zh' ? '返回资源' : 'Resources'}
+              </NodeToolSecondaryButton>
+            )}
             {items.length > 0 && (
               <NodeToolSecondaryButton accent="amber" onClick={handleClearAll} className="text-red-500 hover:bg-red-50">
                 {language === 'zh' ? '清除' : 'Clear'}

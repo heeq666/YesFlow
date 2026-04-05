@@ -31,3 +31,7 @@ preview-server.err
 .claw/
 push.py
 do_push.py
+
+# Local AI assistant settings
+.claude/settings.local.json
+.omx/

@@ -11,6 +11,7 @@ export default defineConfig(({mode}) => {
       'process.env.MINIMAX_API_KEY': JSON.stringify(env.MINIMAX_API_KEY),
     },
     build: {
+      chunkSizeWarningLimit: 400,
       rollupOptions: {
         output: {
           manualChunks: {

@@ -1,6 +1,7 @@
-import type { Node } from '@xyflow/react';
+import type { Edge, Node } from '@xyflow/react';
 
 type NodeDataRecord = Record<string, unknown>;
+type NodeIdentity = Pick<Node, 'id'>;
 
 export function clearTransientNodeData<T extends NodeDataRecord | undefined>(data: T): T {
   if (!data) return data;
@@ -29,4 +30,15 @@ export function sanitizeNodeForPersistence(node: Node): Node {
     selected: false,
     data: serializableData,
   };
+}
+
+export function sanitizeEdgesForPersistence(nodes: NodeIdentity[], edges: Edge[]): Edge[] {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+
+  return edges
+    .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .map((edge) => ({
+      ...edge,
+      selected: false,
+    }));
 }

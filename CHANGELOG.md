@@ -2,6 +2,28 @@
 
 All notable changes to **YesFlow** are documented here.
 
+## [0.3.2] - 2026-04-05
+
+### Added
+
+- Node image workflow upgrades: title editing, copy-source actions, directional reorder controls, and drag-to-reorder support
+- Right-side resource dock now surfaces node images with quick actions for copy, open, and jumping into the image tool
+- Import safeguards for project JSON: lightweight integrity checks and a warning when many embedded images are detected
+- `npm run release:check` and a reusable release checklist in `docs/RELEASE_CHECKLIST.md`
+
+### Changed
+
+- Imported projects now initialize into a fresh local record context instead of overwriting the previous active record
+- Node/edge persistence sanitization is now more consistent across local records and exported JSON files
+- Older local records go through a safer normalization path during load
+- Heavy UI surfaces are split with lazy loading to reduce main bundle pressure
+
+### Fixed
+
+- Top toolbar interaction while selection mode is active
+- Local record save feedback when browser storage quota is exceeded
+- GitHub Pages deploy workflow action versions upgraded to current major releases
+
 ## [0.3.1] - 2026-04-03
 
 ### Added

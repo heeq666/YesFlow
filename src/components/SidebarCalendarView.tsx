@@ -21,6 +21,7 @@ import {
 } from '../utils/nodeTools';
 
 type TabId = 'calendar' | 'detail';
+export type EmbeddedCalendarTab = TabId;
 
 type SidebarCalendarViewProps = {
   language: 'zh' | 'en';
@@ -31,6 +32,13 @@ type SidebarCalendarViewProps = {
   onUpdateNodeData?: (id: string, updates: Partial<TaskData>) => void;
   onJumpToNode: (nodeId: string) => void;
   variant?: 'full' | 'embedded';
+  compact?: boolean;
+  embeddedControls?: {
+    tab: EmbeddedCalendarTab;
+    onTabChange: (tab: EmbeddedCalendarTab) => void;
+    month: Date;
+    onMonthChange: (month: Date) => void;
+  };
 };
 
 function formatEventTime(value: string, allDay: boolean, language: 'zh' | 'en') {
@@ -98,12 +106,31 @@ export default function SidebarCalendarView({
   onUpdateNodeData,
   onJumpToNode,
   variant = 'full',
+  compact = false,
+  embeddedControls,
 }: SidebarCalendarViewProps) {
   const isDarkTheme = settings.themeMode === 'dark';
-  const [currentMonth, setCurrentMonth] = React.useState(() => startOfMonth(new Date()));
+  const [internalCurrentMonth, setInternalCurrentMonth] = React.useState(() => startOfMonth(new Date()));
   const [selectedDateKey, setSelectedDateKey] = React.useState(() => toDateKey(new Date()));
-  const [activeTab, setActiveTab] = React.useState<TabId>('calendar');
+  const [internalActiveTab, setInternalActiveTab] = React.useState<TabId>('calendar');
   const [selectedEvent, setSelectedEvent] = React.useState<ScheduledNodeEvent | null>(null);
+  const currentMonth = embeddedControls?.month ?? internalCurrentMonth;
+  const activeTab = embeddedControls?.tab ?? internalActiveTab;
+  const setCurrentMonth = React.useCallback((updater: Date | ((prev: Date) => Date)) => {
+    if (embeddedControls) {
+      const nextValue = typeof updater === 'function' ? (updater as (prev: Date) => Date)(embeddedControls.month) : updater;
+      embeddedControls.onMonthChange(nextValue);
+      return;
+    }
+    setInternalCurrentMonth((prev) => (typeof updater === 'function' ? (updater as (prev: Date) => Date)(prev) : updater));
+  }, [embeddedControls]);
+  const setActiveTab = React.useCallback((nextTab: TabId) => {
+    if (embeddedControls) {
+      embeddedControls.onTabChange(nextTab);
+      return;
+    }
+    setInternalActiveTab(nextTab);
+  }, [embeddedControls]);
 
   const events = React.useMemo(
     () => extractScheduledNodeEvents(nodes, edges),
@@ -150,6 +177,12 @@ export default function SidebarCalendarView({
     setActiveTab('calendar');
     setSelectedEvent(null);
   };
+
+  React.useEffect(() => {
+    if (activeTab === 'calendar' && selectedEvent) {
+      setSelectedEvent(null);
+    }
+  }, [activeTab, selectedEvent]);
 
   const getNodeData = (nodeId: string): TaskData | undefined => {
     const node = nodes.find(n => n.id === nodeId);
@@ -205,22 +238,25 @@ export default function SidebarCalendarView({
 
     const scheduleItems = Array.isArray(selectedNodeData.tools?.schedule?.items) ? selectedNodeData.tools?.schedule?.items : [];
     const pinnedTypes: Array<'start' | 'end'> = ['start', 'end'];
+    const isDenseEmbedded = layout === 'embedded' && !compact;
 
     return (
-      <div className={`grid gap-2 ${layout === 'embedded' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+      <div className={`grid ${isDenseEmbedded ? 'gap-2.5 grid-cols-2' : `gap-2 ${layout === 'embedded' ? 'grid-cols-1' : 'grid-cols-2'}`}`}>
         {pinnedTypes.map((timeType) => {
           const item = scheduleItems.find((entry) => entry.timeType === timeType);
           const dateValue = item?.dateTime ? toDateKey(item.dateTime) : '';
           const timeValue = getInputTimeValue(item?.dateTime);
 
           return (
-            <div key={timeType} className="rounded-[1rem] border border-neutral-200 bg-white px-3 py-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-neutral-400">
-                    {language === 'zh' ? '固定时间' : 'Pinned time'}
-                  </div>
-                  <div className="mt-1 text-sm font-black text-neutral-900">
+            <div key={timeType} className={`border border-neutral-200 bg-white ${isDenseEmbedded ? 'rounded-xl px-3 py-2.5' : 'rounded-[1rem] px-3 py-3'}`}>
+              <div className={`flex items-center justify-between gap-2 ${isDenseEmbedded ? 'mb-2' : 'mb-2'}`}>
+                <div className={isDenseEmbedded ? 'flex items-center gap-2' : ''}>
+                  {!isDenseEmbedded && (
+                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-neutral-400">
+                      {language === 'zh' ? '固定时间' : 'Pinned time'}
+                    </div>
+                  )}
+                  <div className={`${isDenseEmbedded ? 'text-[13px]' : 'mt-1 text-sm'} font-black text-neutral-900`}>
                     {getScheduleTimeTypeDefaultLabel(timeType, language)}
                   </div>
                 </div>
@@ -233,7 +269,7 @@ export default function SidebarCalendarView({
                 </span>
               </div>
 
-              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.86fr)] gap-2">
+              <div className={`grid items-center gap-2 ${isDenseEmbedded ? 'grid-cols-[minmax(0,1fr)_118px_auto]' : 'grid-cols-[minmax(0,1fr)_minmax(0,0.86fr)]'}`}>
                 <input
                   type="date"
                   value={dateValue}
@@ -247,19 +283,34 @@ export default function SidebarCalendarView({
                   onChange={(event) => updatePinnedScheduleItem(timeType, { time: event.target.value })}
                   className="rounded-[14px] border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12px] text-neutral-700 outline-none transition-all focus:border-amber-200 focus:bg-white disabled:opacity-40"
                 />
+                {isDenseEmbedded && (
+                  <button
+                    type="button"
+                    onClick={() => updatePinnedScheduleItem(timeType, { allDay: !item?.allDay })}
+                    className={`rounded-[14px] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
+                      item?.allDay
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-neutral-100 text-neutral-500 hover:bg-amber-50 hover:text-amber-700'
+                    }`}
+                  >
+                    {language === 'zh' ? '全天' : 'All-day'}
+                  </button>
+                )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => updatePinnedScheduleItem(timeType, { allDay: !item?.allDay })}
-                className={`mt-2 w-full rounded-[14px] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
-                  item?.allDay
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-neutral-100 text-neutral-500 hover:bg-amber-50 hover:text-amber-700'
-                }`}
-              >
-                {language === 'zh' ? '全天' : 'All-day'}
-              </button>
+              {!isDenseEmbedded && (
+                <button
+                  type="button"
+                  onClick={() => updatePinnedScheduleItem(timeType, { allDay: !item?.allDay })}
+                  className={`mt-2 w-full rounded-[14px] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
+                    item?.allDay
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-neutral-100 text-neutral-500 hover:bg-amber-50 hover:text-amber-700'
+                  }`}
+                >
+                  {language === 'zh' ? '全天' : 'All-day'}
+                </button>
+              )}
             </div>
           );
         })}
@@ -312,67 +363,71 @@ export default function SidebarCalendarView({
     const allEvents = events.slice(0, 20);
 
     return (
-      <div className="flex h-full flex-col gap-1">
-        {renderPinnedEditors('embedded')}
-
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1 rounded-lg bg-neutral-100 p-0.5">
-            <button
-              type="button"
-              onClick={() => { setActiveTab('calendar'); setSelectedEvent(null); }}
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold transition-all ${
-                activeTab === 'calendar' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-600'
-              }`}
-            >
-              <CalendarDays className="w-3 h-3" />
-              {language === 'zh' ? '日历' : 'Calendar'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('detail')}
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold transition-all ${
-                activeTab === 'detail' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-600'
-              }`}
-            >
-              <Clock3 className="w-3 h-3" />
-              {language === 'zh' ? '日程' : 'Schedule'}
-            </button>
+      <div className={`flex h-full flex-col ${compact ? 'gap-2' : 'gap-1'}`}>
+        {!embeddedControls && (
+          <div className={`flex items-center justify-between ${compact ? 'gap-2.5' : 'gap-2'}`}>
+            <div className={`flex items-center gap-1 rounded-lg bg-neutral-100 ${compact ? 'p-1' : 'p-0.5'}`}>
+              <button
+                type="button"
+                onClick={() => { setActiveTab('calendar'); setSelectedEvent(null); }}
+                className={`flex items-center gap-1 rounded-md transition-all ${
+                  compact ? 'px-2.5 py-1.5 text-[11px] font-semibold' : 'px-2 py-1 text-[10px] font-bold'
+                } ${
+                  activeTab === 'calendar' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-600'
+                }`}
+              >
+                <CalendarDays className={compact ? 'h-3.5 w-3.5' : 'h-3 w-3'} />
+                {language === 'zh' ? '日历' : 'Calendar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('detail')}
+                className={`flex items-center gap-1 rounded-md transition-all ${
+                  compact ? 'px-2.5 py-1.5 text-[11px] font-semibold' : 'px-2 py-1 text-[10px] font-bold'
+                } ${
+                  activeTab === 'detail' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-600'
+                }`}
+              >
+                <Clock3 className={compact ? 'h-3.5 w-3.5' : 'h-3 w-3'} />
+                {language === 'zh' ? '日程' : 'Schedule'}
+              </button>
+            </div>
+            <div className="flex items-center gap-1">
+              <p className={compact ? 'text-[11px] font-medium text-neutral-500' : 'text-[9px] text-neutral-400'}>
+                {currentMonth.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                })}
+              </p>
+              <button
+                type="button"
+                onClick={() => setCurrentMonth((prev) => addMonths(prev, -1))}
+                className={`flex items-center justify-center rounded-xl text-neutral-400 transition-all hover:bg-neutral-200 hover:text-neutral-700 ${compact ? 'h-7 w-7' : 'h-6 w-6'}`}
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
+                className={`flex items-center justify-center rounded-xl text-neutral-400 transition-all hover:bg-neutral-200 hover:text-neutral-700 ${compact ? 'h-7 w-7' : 'h-6 w-6'}`}
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <p className="text-[9px] text-neutral-400">
-              {currentMonth.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
-                year: 'numeric',
-                month: 'short',
-              })}
-            </p>
-            <button
-              type="button"
-              onClick={() => setCurrentMonth((prev) => addMonths(prev, -1))}
-              className="flex h-6 w-6 items-center justify-center rounded-xl text-neutral-400 transition-all hover:bg-neutral-200 hover:text-neutral-700"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
-              className="flex h-6 w-6 items-center justify-center rounded-xl text-neutral-400 transition-all hover:bg-neutral-200 hover:text-neutral-700"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+        )}
 
         {activeTab === 'calendar' ? (
-          <div className="flex flex-col flex-1 min-h-0 gap-1">
-            <div className="grid grid-cols-7 gap-1">
+          <div className={`flex flex-col flex-1 min-h-0 ${compact ? 'gap-1.5' : 'gap-1'}`}>
+            <div className={`grid grid-cols-7 ${compact ? 'gap-1.5' : 'gap-1'}`}>
               {weekdayLabels.map((label) => (
-                <div key={label} className="text-center text-[9px] font-black uppercase tracking-[0.14em] text-neutral-300">
+                <div key={label} className={`text-center font-black uppercase text-neutral-300 ${compact ? 'text-[10px] tracking-[0.1em]' : 'text-[9px] tracking-[0.14em]'}`}>
                   {label}
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1 flex-1">
+            <div className={`grid grid-cols-7 flex-1 ${compact ? 'gap-1.5' : 'gap-1'}`}>
               {monthDays.map((day) => {
                 const key = toDateKey(day);
                 const dayEvents = eventsByDate.get(key) || [];
@@ -390,7 +445,9 @@ export default function SidebarCalendarView({
                         handleEventClick(dayEvents[0]);
                       }
                     }}
-                    className={`relative flex h-full min-h-[44px] flex-col items-start justify-between rounded-xl border px-1.5 py-1.5 text-left text-[10px] font-black transition-all ${
+                    className={`relative flex h-full flex-col items-start justify-between rounded-xl border text-left font-black transition-all ${
+                      compact ? 'min-h-[50px] px-2 py-2 text-[11px]' : 'min-h-[44px] px-1.5 py-1.5 text-[10px]'
+                    } ${
                       isSelected
                         ? 'border-primary/20 bg-primary/6 text-neutral-800 shadow-sm'
                         : isCurrentMonth
@@ -401,7 +458,7 @@ export default function SidebarCalendarView({
                           <div className="flex w-full items-center justify-between gap-1">
                             <span className={`${isCurrentMonth ? 'text-neutral-800' : 'text-neutral-300'}`}>{day.getDate()}</span>
                             {isToday && (
-                              <span className="rounded-full bg-primary px-1 py-0.5 text-[7px] font-black uppercase tracking-[0.12em] text-white">
+                              <span className={`rounded-full bg-primary text-white font-black uppercase ${compact ? 'px-1.5 py-0.5 text-[8px] tracking-[0.08em]' : 'px-1 py-0.5 text-[7px] tracking-[0.12em]'}`}>
                                 {language === 'zh' ? '今' : 'Now'}
                               </span>
                             )}
@@ -418,7 +475,7 @@ export default function SidebarCalendarView({
                         />
                       ))}
                       {dayEvents.length > 2 && (
-                        <span className="text-[8px] font-black text-neutral-400">+{dayEvents.length - 2}</span>
+                        <span className={compact ? 'text-[9px] font-black text-neutral-500' : 'text-[8px] font-black text-neutral-400'}>+{dayEvents.length - 2}</span>
                       )}
                     </div>
                   </button>

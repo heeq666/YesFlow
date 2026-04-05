@@ -347,6 +347,12 @@
   pointer-events: all !important; /* Re-enable for the GroupNode content */
 }
 
+/* TopToolbar must remain interactive during selection mode */
+.react-flow__pane.selection .react-flow__panel,
+.react-flow__pane.selection .react-flow__panel * {
+  pointer-events: all !important;
+}
+
 .react-flow__node-task {
   /* Dynamic z-index is handled by code to support drag-over feedback */
 }

@@ -18,6 +18,7 @@ const GENERIC_TABLE_COLUMNS_ZH = ['项目', '数值', '备注'];
 const GENERIC_TABLE_COLUMNS_EN = ['Item', 'Value', 'Notes'];
 const FITNESS_TABLE_COLUMNS_ZH = ['日期', '体重', '体脂', '围度', '训练内容', '睡眠', '备注'];
 const FITNESS_TABLE_COLUMNS_EN = ['Date', 'Weight', 'Body Fat', 'Measurement', 'Workout', 'Sleep', 'Notes'];
+export const MAX_NODE_IMAGE_FILE_BYTES = 15 * 1024 * 1024;
 export const SCHEDULE_TIME_TYPE_OPTIONS: Array<{
   id: ScheduleTimeType;
   labelZh: string;
@@ -101,6 +102,34 @@ export function createImageItem(src: string, title: string, alt?: string): NodeI
     src,
     alt: alt || title,
   };
+}
+
+export function moveItemById<T extends { id: string }>(items: T[], itemId: string, direction: -1 | 1) {
+  const currentIndex = items.findIndex((item) => item.id === itemId);
+  if (currentIndex === -1) return items;
+
+  const targetIndex = currentIndex + direction;
+  if (targetIndex < 0 || targetIndex >= items.length) return items;
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(currentIndex, 1);
+  nextItems.splice(targetIndex, 0, movedItem);
+  return nextItems;
+}
+
+export function moveItemToTargetId<T extends { id: string }>(items: T[], itemId: string, targetId: string) {
+  if (itemId === targetId) return items;
+
+  const currentIndex = items.findIndex((item) => item.id === itemId);
+  const targetIndex = items.findIndex((item) => item.id === targetId);
+
+  if (currentIndex === -1 || targetIndex === -1) return items;
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(currentIndex, 1);
+  const insertionIndex = currentIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  nextItems.splice(insertionIndex, 0, movedItem);
+  return nextItems;
 }
 
 export function createDefaultImageData(): NodeImageData {

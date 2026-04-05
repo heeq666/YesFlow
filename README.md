@@ -1,6 +1,6 @@
 # YesFlow
 
-> v0.3.1 · A visual AI workflow workspace for planning, structuring, and pushing complex goals forward on one canvas.
+> v0.3.2 · A visual AI workflow workspace for planning, structuring, and pushing complex goals forward on one canvas.
 
 [English](./README.md) · [中文](./README_ZH.md)
 
@@ -15,7 +15,7 @@
   <a href="https://github.com/heeq666/YesFlow/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License">
   </a>
-  <img src="https://img.shields.io/badge/Version-0.3.1-black?style=flat-square" alt="Version 0.3.1">
+  <img src="https://img.shields.io/badge/Version-0.3.2-black?style=flat-square" alt="Version 0.3.2">
   <img src="https://img.shields.io/badge/React-19-149eca?style=flat-square&logo=react" alt="React 19">
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript" alt="TypeScript 5">
 </p>
@@ -24,15 +24,15 @@
 
 YesFlow turns a natural-language goal into an editable execution map. You can generate a plan with AI, refine it on a node-based canvas, and keep each node's supporting materials inside the same workspace with documents, images, links, schedules, and tables.
 
-Version `0.3.1` sharpens the day-to-day experience with node image attachments, cleaner project persistence, and better feedback around long-running AI actions.
+Version `0.3.2` focuses on safer project import/export, stronger local record reliability, and smoother image workflow operations inside each node.
 
-## What's New in 0.3.1
+## What's New in 0.3.2
 
-- Node image tool with local upload and remote URL support
-- Project records now keep per-record AI task progress, success states, and failure feedback
-- Save/export flows sanitize transient UI fields before writing JSON or local records
-- Shared task layout constants keep canvas editing, group generation, and AI placement more consistent
-- Runtime error boundary prevents full blank-screen failures and surfaces crash details in development
+- Enhanced image workflow: edit image titles, copy source URLs, reorder with controls, and drag-sort in both image entry surfaces
+- Right-side resource dock now surfaces node images with quick actions for copy, open, and jump-to-tool
+- Import safety checks: lightweight integrity validation plus warning when JSON includes many embedded images
+- Persistence hardening across local records and JSON exports, plus safer migration for older saved data
+- Better release reliability: new `npm run release:check`, reusable release checklist, and reduced bundle pressure via lazy-loaded heavy UI sections
 
 ## Core Capabilities
 

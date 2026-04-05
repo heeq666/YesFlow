@@ -1459,8 +1459,8 @@ export default function SettingsModal({ settings, language, onClose, onUpdate, o
                   <p className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 ${isDarkTheme ? 'text-slate-300' : 'text-neutral-500'}`}>One Yes, All Flow</p>
                   <p className={`max-w-xl text-sm leading-7 mb-6 ${isDarkTheme ? 'text-slate-300' : 'text-neutral-500'}`}>
                     {language === 'zh'
-                      ? 'YesFlow 0.3.1 将 AI 生成、可视化编排、节点资料与图片沉淀，以及项目推进整合进同一个工作空间，让复杂目标真正可以在一张画布上持续推进。'
-                      : 'YesFlow 0.3.1 brings AI generation, visual orchestration, node-level context, image references, and project progress into one workspace so complex goals can keep moving on a single canvas.'}
+                      ? 'YesFlow 0.3.2 重点强化了图片资料管理、项目导入完整性与本地记录可靠性，让复杂目标在同一张画布上推进时更稳、更快、更可控。'
+                      : 'YesFlow 0.3.2 improves image management, import integrity checks, and local record reliability so complex goals can move forward more smoothly on one canvas.'}
                   </p>
                   
                   <div className="flex flex-col items-center gap-3">

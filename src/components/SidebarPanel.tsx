@@ -139,6 +139,42 @@ function getRecordModeMeta(mode: TaskMode, language: 'zh' | 'en') {
   };
 }
 
+function formatRecordSavedExact(timestamp: number, language: 'zh' | 'en') {
+  return new Date(timestamp).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatRecordSavedRelative(timestamp: number, language: 'zh' | 'en', now: number) {
+  const diffMs = Math.max(0, now - timestamp);
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+  const diffHours = Math.floor(diffMs / (60 * 60 * 1000));
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+
+  if (diffMs < 60 * 1000) {
+    return language === 'zh' ? '刚刚保存' : 'Saved just now';
+  }
+
+  if (diffMinutes < 60) {
+    return language === 'zh' ? `${diffMinutes} 分钟前保存` : `Saved ${diffMinutes} min ago`;
+  }
+
+  if (diffHours < 24) {
+    return language === 'zh' ? `${diffHours} 小时前保存` : `Saved ${diffHours} hr ago`;
+  }
+
+  if (diffDays < 7) {
+    return language === 'zh' ? `${diffDays} 天前保存` : `Saved ${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  }
+
+  return language === 'zh'
+    ? `保存于 ${formatRecordSavedExact(timestamp, language)}`
+    : `Saved on ${formatRecordSavedExact(timestamp, language)}`;
+}
+
 export default function SidebarPanel(props: SidebarPanelProps) {
   const {
     language,
@@ -218,7 +254,9 @@ export default function SidebarPanel(props: SidebarPanelProps) {
   const tickerShiftDurationMs = 420;
   const recordSlotRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
   const generatingStandaloneSlotRef = React.useRef<HTMLDivElement | null>(null);
-  const generatingTargetRecordId = generatingRecordId ?? null;
+  const isGeneratingActive = Boolean(isGeneratingPlan);
+  const shouldHideGeneratingTargetRecord = isGeneratingActive && Boolean(hideGeneratingRecord);
+  const generatingTargetRecordId = isGeneratingActive ? (generatingRecordId ?? null) : null;
   const hasGeneratingTargetRecord = generatingTargetRecordId
     ? localRecords.some((record) => record.id === generatingTargetRecordId)
     : false;
@@ -226,6 +264,15 @@ export default function SidebarPanel(props: SidebarPanelProps) {
   const [draggingRecordId, setDraggingRecordId] = React.useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = React.useState<{ recordId: string; position: 'before' | 'after' } | null>(null);
   const suppressRecordClickRef = React.useRef(false);
+  const [recordsNow, setRecordsNow] = React.useState(() => Date.now());
+
+  React.useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setRecordsNow(Date.now());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const setTickerLineImmediate = React.useCallback((line: string) => {
     const safeLine = line.trim() || streamingIdleText;
@@ -559,6 +606,8 @@ export default function SidebarPanel(props: SidebarPanelProps) {
     const isRecordAiRunning = (recordAiState?.runningNodeIds.length || 0) > 0;
     const hasUnreadAiResult = Boolean(recordAiState?.unread && recordAiState?.latestStatus);
     const hasAiResult = Boolean(recordAiState?.latestStatus);
+    const savedRelative = formatRecordSavedRelative(record.lastModified, language, recordsNow);
+    const savedExact = formatRecordSavedExact(record.lastModified, language);
     const aiResultTone = recordAiState?.latestStatus === 'error'
       ? {
           dot: 'bg-red-500',
@@ -641,9 +690,9 @@ export default function SidebarPanel(props: SidebarPanelProps) {
                 <div className="flex items-center gap-2">
                   <h4 className={`min-w-0 flex-1 text-xs font-bold truncate ${isActive ? 'text-primary' : 'text-neutral-700'}`}>{record.name}</h4>
                 </div>
-                <div className="flex items-center gap-1.5 mt-1 text-[10px] text-neutral-400">
+                <div className="mt-1 flex items-center gap-1.5 text-[10px] text-neutral-400" title={savedExact}>
                   <Clock className="w-2.5 h-2.5" />
-                  <span>{new Date(record.lastModified).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span>{savedRelative}</span>
                 </div>
               </div>
             </div>
@@ -689,6 +738,7 @@ export default function SidebarPanel(props: SidebarPanelProps) {
     handleRecordDragStart,
     handleRecordDrop,
     language,
+    recordsNow,
     recordAiStates,
   ]);
 
@@ -964,7 +1014,7 @@ export default function SidebarPanel(props: SidebarPanelProps) {
                 <span>{language === 'zh' ? '项目记录' : 'Project Records'} ({localRecords.length})</span>
               </div>
               <div className="space-y-2" ref={recordsListRef}>
-                {isGeneratingPlan && !hasGeneratingTargetRecord && (
+                {isGeneratingActive && !hasGeneratingTargetRecord && (
                   <div ref={generatingStandaloneSlotRef} className="relative h-[68px]">
                     {renderGeneratingCard()}
                   </div>
@@ -980,8 +1030,8 @@ export default function SidebarPanel(props: SidebarPanelProps) {
                     >
                       <motion.div initial={false} className="relative">
                         {renderRecordCard(record, {
-                          hidden: hideGeneratingRecord && isGeneratingTarget,
-                          entrance: !hideGeneratingRecord && isGeneratingTarget,
+                          hidden: shouldHideGeneratingTargetRecord && isGeneratingTarget,
+                          entrance: !shouldHideGeneratingTargetRecord && isGeneratingTarget,
                         })}
                       </motion.div>
                       {isGeneratingTarget && renderGeneratingCard()}
