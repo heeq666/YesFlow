@@ -14,10 +14,11 @@ export default defineConfig(({mode}) => {
       chunkSizeWarningLimit: 400,
       rollupOptions: {
         output: {
-          manualChunks: {
-            reactflow: ['@xyflow/react', 'dagre'],
-            motion: ['motion/react'],
-            icons: ['lucide-react'],
+          manualChunks(id) {
+            if (id.includes('@xyflow/react') || id.includes('dagre')) return 'reactflow';
+            if (id.includes('motion/react')) return 'motion';
+            if (id.includes('lucide-react')) return 'icons';
+            return undefined;
           },
         },
       },

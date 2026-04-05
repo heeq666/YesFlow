@@ -464,8 +464,10 @@ export function formatScheduleSummary(schedule: NodeSchedule | undefined, langua
   // 获取第一个有时间值的项
   const firstItemWithTime = normalizedSchedule.items.find(item => item.dateTime);
   if (!firstItemWithTime) return null;
+  const { dateTime } = firstItemWithTime;
+  if (!dateTime) return null;
 
-  const date = new Date(firstItemWithTime.dateTime);
+  const date = new Date(dateTime);
   if (Number.isNaN(date.getTime())) return null;
 
   if (firstItemWithTime.allDay) {

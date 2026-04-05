@@ -122,6 +122,7 @@ const getDisplayType = (type: string, lang: 'zh' | 'en', typeLabel?: string) => 
 export default React.memo(function CustomNode({ id, data, selected = false }: NodeProps & { data: TaskData }) {
   const context = React.useContext(NodeSettingsContext);
   const themeMode = context.themeMode;
+  const isDraggingOver = Boolean((data as { isDraggingOver?: boolean }).isDraggingOver);
   const isDailyMode = context.mode === 'daily';
   const nodeLayout = getTaskNodeLayout(context.mode);
 
@@ -676,7 +677,7 @@ export default React.memo(function CustomNode({ id, data, selected = false }: No
       />
 
       <AnimatePresence>
-        {data.isDraggingOver && (
+        {isDraggingOver && (
           <motion.div
             initial={{ opacity: 0, y: 10, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}

@@ -20,7 +20,7 @@ export const matchesHotkey = (hotkey: string, event: KeyboardEvent | Set<string>
     if (!mainKey && !isLmb) return true;
     if (!mainKey && isLmb) return true;
 
-    const targetKey = mainKey === 'space' ? ' ' : mainKey;
+    const targetKey = mainKey === 'space' ? ' ' : mainKey!;
     return event.has(targetKey);
   }
 

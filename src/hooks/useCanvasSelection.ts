@@ -48,14 +48,14 @@ export function useCanvasSelection({
 
   const handleNodeDragStart = useCallback((_: any, __: Node) => {
     isNodeDraggingRef.current = true;
-    const storeNodes = store.getState().nodes;
-    const current = storeNodes.filter((n: Node) => n.selected).map((n: Node) => n.id);
+    const storeNodes = (store.getState().nodes as Node[]) ?? [];
+    const current = storeNodes.filter((n) => n.selected).map((n) => n.id);
     prevSelectedNodeIdsRef.current = new Set(current);
   }, [store]);
 
   const handleSelectionEnd = useCallback(() => {
-    const storeNodes = store.getState().nodes;
-    const currentlySelected = new Set(storeNodes.filter((n: Node) => n.selected).map((n: Node) => n.id));
+    const storeNodes = (store.getState().nodes as Node[]) ?? [];
+    const currentlySelected = new Set<string>(storeNodes.filter((n) => n.selected).map((n) => n.id));
     const prevIds = prevSelectedNodeIdsRef.current;
     const shiftHeld = activeKeysRef.current.has('shift');
 
@@ -89,7 +89,9 @@ export function useCanvasSelection({
       .react-flow__node:focus { outline: none !important; }
     `;
     document.head.appendChild(style);
-    return () => document.head.removeChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
   }, []);
 
   useEffect(() => {

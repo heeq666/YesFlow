@@ -281,7 +281,7 @@ export function useCanvasActions({
     };
 
     setNodes((currentNodes) => {
-      const nextNodes = currentNodes.map((node) => ({ ...node, selected: false })).concat(newNode);
+      const nextNodes = [...currentNodes.map((node) => ({ ...node, selected: false })), { ...newNode, selected: true }];
       takeSnapshot(nextNodes, edges);
       return nextNodes;
     });
@@ -405,7 +405,7 @@ export function useCanvasActions({
       };
 
       setNodes((currentNodes) => {
-        const nextNodes = currentNodes.map((node) => ({ ...node, selected: false })).concat(newNode);
+        const nextNodes = [...currentNodes.map((node) => ({ ...node, selected: false })), { ...newNode, selected: true }];
         setEdges((currentEdges) => {
           const nextEdges = [...currentEdges, newEdge];
           takeSnapshot(nextNodes, nextEdges);
@@ -441,7 +441,7 @@ export function useCanvasActions({
     };
 
     setNodes((currentNodes) => {
-      const nextNodes = currentNodes.map((node) => ({ ...node, selected: false })).concat(newNode);
+      const nextNodes = [...currentNodes.map((node) => ({ ...node, selected: false })), { ...newNode, selected: true }];
       takeSnapshot(nextNodes, edges);
       return nextNodes;
     });
@@ -482,7 +482,7 @@ export function useCanvasActions({
       };
 
       setNodes((currentNodes) => {
-        const nextNodes = currentNodes.map((node) => ({ ...node, selected: false })).concat(newNode);
+        const nextNodes = [...currentNodes.map((node) => ({ ...node, selected: false })), { ...newNode, selected: true }];
         takeSnapshot(nextNodes, edges);
         return nextNodes;
       });
@@ -501,7 +501,7 @@ export function useCanvasActions({
       };
 
       setNodes((currentNodes) => {
-        const nextNodes = currentNodes.map((node) => ({ ...node, selected: false })).concat(newNode);
+        const nextNodes = [...currentNodes.map((node) => ({ ...node, selected: false })), { ...newNode, selected: true }];
         takeSnapshot(nextNodes, edges);
         return nextNodes;
       });
@@ -693,7 +693,7 @@ export function useCanvasActions({
         description: '',
         language,
         isGroup: true,
-        onUngroup: (id) => handleUngroup(id)
+        onUngroup: (id: string) => handleUngroup(id)
       },
       zIndex: -1, // 初始置于底层
     };

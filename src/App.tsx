@@ -415,7 +415,7 @@ export default function App() {
       data: { pathType: defaultPathType, connectionMode },
     };
     setNodes(nds => {
-      const next = nds.map(n => ({ ...n, selected: false })).concat(newNode);
+      const next = [...nds.map(n => ({ ...n, selected: false })), { ...newNode, selected: true }];
       setEdges(eds => { const nextEds = [...eds, newEdge]; takeSnapshot(next, nextEds); return nextEds; });
       return next;
     });

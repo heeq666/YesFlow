@@ -963,10 +963,12 @@ export default function SidebarPanel(props: SidebarPanelProps) {
               {nodeData.tools?.schedule?.enabled && nodeData.tools?.schedule?.items?.length > 0 && (() => {
                 const firstItemWithTime = nodeData.tools.schedule.items.find(item => item.dateTime);
                 if (!firstItemWithTime) return null;
+                const { dateTime } = firstItemWithTime;
+                if (!dateTime) return null;
                 return (
                   <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-neutral-400 ring-1 ring-black/5">
                     <Clock className="w-2.5 h-2.5" />
-                    <span>{new Date(firstItemWithTime.dateTime).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', {
+                    <span>{new Date(dateTime).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', {
                       month: 'short',
                       day: 'numeric',
                       hour: firstItemWithTime.allDay ? undefined : '2-digit',

@@ -364,6 +364,7 @@ export default function RightToolSidebar({
   const activeToolConfig = activeToolId ? getToolConfig(activeToolId) : null;
   const activeToolTone = getAccentTone(activeToolConfig?.accentClass);
   const activeToolSnapshot = activeToolId && nodeData ? getToolSnapshot(activeToolId, nodeData, language) : null;
+  const activeToolLabel = activeToolId ? getToolLabel(activeToolId, language) : '';
   const showWorkspaceHeader =
     workspaceView !== 'overview' && (!activeToolConfig || !activeToolSnapshot || !activeToolSnapshot.enabled);
   const enabledToolCount = toolViews.filter((entry) => entry.snapshot?.enabled).length;
@@ -939,7 +940,7 @@ export default function RightToolSidebar({
                                 {language === 'zh' ? '当前插件' : 'Active Plugin'}
                               </div>
                               <div className="mt-1 flex flex-wrap items-center gap-2">
-                                <div className="text-[15px] font-black text-neutral-900">{getToolLabel(activeToolId, language)}</div>
+                                <div className="text-[15px] font-black text-neutral-900">{activeToolLabel}</div>
                                 <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${activeToolTone.tint} ${activeToolTone.text}`}>
                                   {language === 'zh' ? '聚焦中' : 'Focused'}
                                 </span>

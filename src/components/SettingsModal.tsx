@@ -456,7 +456,7 @@ export default function SettingsModal({ settings, language, onClose, onUpdate, o
                             </div>
                           ) : (
                             <div className="flex items-center gap-1">
-                                {value.split('+').map((k, i) => (
+                                {value.split('+').map((k: string, i: number) => (
                                      <React.Fragment key={i}>
                                         <span className="px-1.5 py-0.5 bg-neutral-100 rounded-md border border-neutral-200 text-[9px] shadow-sm">{k}</span>
                                         {i < value.split('+').length - 1 && <span className="text-neutral-300">+</span>}
