@@ -1459,8 +1459,8 @@ export default function SettingsModal({ settings, language, onClose, onUpdate, o
                   <p className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 ${isDarkTheme ? 'text-slate-300' : 'text-neutral-500'}`}>One Yes, All Flow</p>
                   <p className={`max-w-xl text-sm leading-7 mb-6 ${isDarkTheme ? 'text-slate-300' : 'text-neutral-500'}`}>
                     {language === 'zh'
-                      ? 'YesFlow 0.3.2 重点强化了图片资料管理、项目导入完整性与本地记录可靠性，让复杂目标在同一张画布上推进时更稳、更快、更可控。'
-                      : 'YesFlow 0.3.2 improves image management, import integrity checks, and local record reliability so complex goals can move forward more smoothly on one canvas.'}
+                      ? 'YesFlow 0.3.3 升级了核心工具链并优化了首屏加载与画布性能，让复杂项目在同一张画布上的编排响应更快、发布流程更稳。'
+                      : 'YesFlow 0.3.3 upgrades the core toolchain and improves initial loading plus canvas performance, delivering faster orchestration and more reliable releases.'}
                   </p>
                   
                   <div className="flex flex-col items-center gap-3">

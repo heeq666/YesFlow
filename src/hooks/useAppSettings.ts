@@ -54,7 +54,7 @@ const DEFAULT_PROVIDERS: ApiProvider[] = [
 const DEFAULT_SETTINGS: Settings = {
   language: 'zh',
   themeMode: 'light',
-  version: '0.3.2',
+  version: '0.3.3',
   hotkeys: {
     save: 'Ctrl+S',
     export: 'Ctrl+Alt+S',
@@ -112,10 +112,10 @@ const DEFAULT_SETTINGS: Settings = {
     providers: DEFAULT_PROVIDERS,
   },
   updateNotes: [
-    '🖼️ 图片流程升级：支持图片标题编辑、来源复制、按钮排序与拖拽排序，管理节点素材更高效。',
-    '🧰 资源栏增强：右侧资源区可直接查看节点图片，并支持复制链接、打开原图和跳转到图片工具。',
-    '🛡️ 导入更安全：导入 JSON 前会做轻量完整性检查，并在嵌入图片过多时给出提醒。',
-    '💾 持久化更稳：本地记录和导出文件统一清理临时字段，旧记录加载与保存失败提示更可靠。',
+    '工具链升级到 Vite 8 与 TypeScript 6，整体构建与类型检查更稳定。',
+    '首屏加载优化：主入口包进一步缩小，AI 与布局模块改为按需加载。',
+    '画布性能优化：边高亮计算改进并复用稳定对象，减少不必要重渲染。',
+    '发布流程修复：GitHub Actions 使用 Node 24.13.0，npm ci 更可靠。',
   ],
 };
 

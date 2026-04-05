@@ -1,5 +1,5 @@
 {
   "name": "YesFlow",
-  "description": "YesFlow 0.3.2 improves image workflow controls, import safety checks, and local record reliability in the visual AI workspace.",
+  "description": "YesFlow 0.3.3 upgrades the toolchain, optimizes bundle loading and canvas rendering performance, and hardens CI release reliability.",
   "requestFramePermissions": []
 }

@@ -2,6 +2,25 @@
 
 All notable changes to **YesFlow** are documented here.
 
+## [0.3.3] - 2026-04-05
+
+### Changed
+
+- Upgraded core toolchain to modern versions, including Vite 8, TypeScript 6, and the latest React plugin and icon package
+- Improved release pipeline compatibility by updating GitHub Actions to Node 24.13.0 for reliable `npm ci` installs
+- Refined bundle splitting strategy to improve cache reuse and reduce initial payload
+
+### Improved
+
+- Reduced main entry bundle size significantly through additional code-splitting and on-demand module loading
+- Deferred heavy AI/layout modules (`aiService`, `flowLayout`) until feature interaction instead of loading them at first paint
+- Optimized canvas edge highlighting with adjacency traversal and stable edge object reuse to reduce unnecessary re-renders
+
+### Fixed
+
+- Resolved strict TypeScript regressions introduced by dependency upgrades (React types, node selection typing, nullable checks, and Vite output typing)
+- Eliminated inconsistent local dependency states that previously caused missing Vite chunk module errors in development
+
 ## [0.3.2] - 2026-04-05
 
 ### Added
