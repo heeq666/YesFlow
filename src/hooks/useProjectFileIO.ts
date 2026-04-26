@@ -5,6 +5,13 @@ import type { Edge, Node } from '@xyflow/react';
 import { createHistory, type HistoryState } from '../utils/historyUtils';
 import type { TaskData, TaskMode } from '../types';
 import { clearTransientNodeData, sanitizeEdgesForPersistence, sanitizeNodeForPersistence } from '../utils/nodePersistence';
+import {
+  createProjectExportContent,
+  getProjectExportFormat,
+  readYesFlowPayloadFromImport,
+  stripProjectExportExtension,
+  type ProjectExportFormat,
+} from '../utils/projectExportFormats';
 
 const EMBEDDED_IMAGE_WARNING_COUNT = 6;
 const EMBEDDED_IMAGE_WARNING_BYTES = 6 * 1024 * 1024;
@@ -107,12 +114,13 @@ export function useProjectFileIO({
   fileInputRef,
   onImportSuccess,
 }: UseProjectFileIOParams) {
-  const saveFile = useCallback((fileName?: string) => {
+  const saveFile = useCallback((fileName?: string, format: ProjectExportFormat = 'json') => {
     const rawName = (fileName || projectName).trim();
     const cleanName = (rawName || 'YesFlow Project')
-      .replace(/\.(json|zip|txt)$/i, '')
+      .replace(/\.(json|pos|posf|vdx|vsdx|mmd|mermaid|zip|txt)$/i, '')
       .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
       .trim() || 'YesFlow Project';
+    const exportFormat = getProjectExportFormat(format);
     const sanitizedNodes = nodes.map(sanitizeNodeForPersistence);
     const exportData = {
       projectName: cleanName,
@@ -121,11 +129,14 @@ export function useProjectFileIO({
       nodes: sanitizedNodes,
       edges: sanitizeEdgesForPersistence(sanitizedNodes, edges),
     };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const blob = new Blob(
+      [createProjectExportContent(exportData, format)],
+      { type: exportFormat.mimeType },
+    );
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${cleanName}.json`;
+    link.download = `${stripProjectExportExtension(cleanName)}.${exportFormat.extension}`;
     link.click();
     URL.revokeObjectURL(url);
   }, [projectName, language, mode, nodes, edges]);
@@ -134,7 +145,7 @@ export function useProjectFileIO({
     let resetDelayMs = 4000;
 
     try {
-      const data = JSON.parse(content);
+      const data = readYesFlowPayloadFromImport(JSON.parse(content));
       if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) throw new Error('Invalid JSON');
       if (!data.nodes.every(isImportNodeLike) || !data.edges.every(isImportEdgeLike)) {
         throw new Error('Invalid node or edge payload');

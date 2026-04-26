@@ -10,6 +10,17 @@ export default function ChangelogModal({ onClose }: ChangelogModalProps) {
   const isDarkTheme = typeof document !== 'undefined' && document.documentElement.style.colorScheme === 'dark';
   const changelog = [
     {
+      version: "0.3.4",
+      date: "2026-04-26",
+      changes: [
+        { type: "added", text: "新增 YesFlow JSON、POS、POSF、Visio VDX 与 Mermaid 文本导出格式。" },
+        { type: "added", text: "POS/POSF 项目包支持通过文件选择器和拖拽方式重新导入。" },
+        { type: "changed", text: "导出格式生成逻辑集中到独立工具中，文件保存路径更清晰。" },
+        { type: "fixed", text: "修复拖动节点后本地记录自动保存可能触发的白屏崩溃。" },
+        { type: "fixed", text: "拖动吸附时不再直接修改 React Flow 变更对象，提升兼容性。" },
+      ]
+    },
+    {
       version: "0.3.2",
       date: "2026-04-05",
       changes: [

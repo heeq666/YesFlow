@@ -54,7 +54,7 @@ const DEFAULT_PROVIDERS: ApiProvider[] = [
 const DEFAULT_SETTINGS: Settings = {
   language: 'zh',
   themeMode: 'light',
-  version: '0.3.3',
+  version: '0.3.4',
   hotkeys: {
     save: 'Ctrl+S',
     export: 'Ctrl+Alt+S',

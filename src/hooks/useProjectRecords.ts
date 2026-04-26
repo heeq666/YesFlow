@@ -114,6 +114,8 @@ export function useProjectRecords({
       ? (value as (prev: string | null) => string | null)(currentRecordIdRef.current)
       : value;
 
+    if (currentRecordIdRef.current === nextValue) return;
+
     currentRecordIdRef.current = nextValue;
     setCurrentRecordIdState(nextValue);
   }, []);

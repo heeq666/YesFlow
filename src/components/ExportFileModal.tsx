@@ -2,11 +2,15 @@ import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Download, FileJson, X } from 'lucide-react';
 
+import { PROJECT_EXPORT_FORMATS, getProjectExportFormat, type ProjectExportFormat } from '../utils/projectExportFormats';
+
 type ExportFileModalProps = {
   visible: boolean;
   language: 'zh' | 'en';
   fileName: string;
+  format: ProjectExportFormat;
   onFileNameChange: (value: string) => void;
+  onFormatChange: (value: ProjectExportFormat) => void;
   onConfirm: () => void;
   onClose: () => void;
 };
@@ -15,11 +19,14 @@ export default function ExportFileModal({
   visible,
   language,
   fileName,
+  format,
   onFileNameChange,
+  onFormatChange,
   onConfirm,
   onClose,
 }: ExportFileModalProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const selectedFormat = getProjectExportFormat(format);
 
   React.useEffect(() => {
     if (!visible) return;
@@ -59,6 +66,27 @@ export default function ExportFileModal({
 
               <div className="mt-6 space-y-3">
                 <label className="block text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
+                  {language === 'zh' ? '保存格式' : 'Format'}
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {PROJECT_EXPORT_FORMATS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => onFormatChange(option.id)}
+                      className={`rounded-xl border px-3 py-2 text-left transition-all ${
+                        format === option.id
+                          ? 'border-primary/40 bg-primary/10 text-primary shadow-sm'
+                          : 'border-neutral-200 bg-neutral-50 text-neutral-500 hover:border-neutral-300 hover:bg-white'
+                      }`}
+                    >
+                      <span className="block text-xs font-black">{option.label}</span>
+                      <span className="block text-[10px] font-bold uppercase opacity-65">.{option.extension}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <label className="block text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
                   {language === 'zh' ? '文件名' : 'Filename'}
                 </label>
                 <div className="flex items-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 focus-within:border-primary/30 focus-within:bg-white transition-colors">
@@ -75,7 +103,7 @@ export default function ExportFileModal({
                     }}
                     className="flex-1 bg-transparent outline-none text-sm font-semibold text-neutral-900"
                   />
-                  <span className="text-sm font-bold text-neutral-400">.json</span>
+                  <span className="text-sm font-bold text-neutral-400">.{selectedFormat.extension}</span>
                 </div>
                 <p className="text-[11px] text-neutral-400">
                   {language === 'zh'

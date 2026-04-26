@@ -1,6 +1,6 @@
 # YesFlow
 
-> v0.3.2 · A visual AI workflow workspace for planning, structuring, and pushing complex goals forward on one canvas.
+> v0.3.4 · A visual AI workflow workspace for planning, structuring, and pushing complex goals forward on one canvas.
 
 [English](./README.md) · [中文](./README_ZH.md)
 
@@ -15,24 +15,24 @@
   <a href="https://github.com/heeq666/YesFlow/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License">
   </a>
-  <img src="https://img.shields.io/badge/Version-0.3.2-black?style=flat-square" alt="Version 0.3.2">
+  <img src="https://img.shields.io/badge/Version-0.3.4-black?style=flat-square" alt="Version 0.3.4">
   <img src="https://img.shields.io/badge/React-19-149eca?style=flat-square&logo=react" alt="React 19">
-  <img src="https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript" alt="TypeScript 5">
+  <img src="https://img.shields.io/badge/TypeScript-6-3178c6?style=flat-square&logo=typescript" alt="TypeScript 6">
 </p>
 
 ## Overview
 
 YesFlow turns a natural-language goal into an editable execution map. You can generate a plan with AI, refine it on a node-based canvas, and keep each node's supporting materials inside the same workspace with documents, images, links, schedules, and tables.
 
-Version `0.3.2` focuses on safer project import/export, stronger local record reliability, and smoother image workflow operations inside each node.
+Version `0.3.4` expands project export formats and fixes a drag-triggered blank screen in local record autosave.
 
-## What's New in 0.3.2
+## What's New in 0.3.4
 
-- Enhanced image workflow: edit image titles, copy source URLs, reorder with controls, and drag-sort in both image entry surfaces
-- Right-side resource dock now surfaces node images with quick actions for copy, open, and jump-to-tool
-- Import safety checks: lightweight integrity validation plus warning when JSON includes many embedded images
-- Persistence hardening across local records and JSON exports, plus safer migration for older saved data
-- Better release reliability: new `npm run release:check`, reusable release checklist, and reduced bundle pressure via lazy-loaded heavy UI sections
+- Export projects as YesFlow JSON, POS, POSF, Visio VDX, or Mermaid text from the export dialog
+- Re-import POS/POSF project packages through the file picker or drag-and-drop import flow
+- Fixed a canvas blank-screen crash caused by local record autosave during node dragging
+- Avoided mutating React Flow node-change payloads while applying drag snapping
+- Simplified node tool snapshots for cleaner sidebar and quick-entry state rendering
 
 ## Core Capabilities
 

@@ -88,6 +88,7 @@ import { useEdgeHighlighting } from './hooks/useEdgeHighlighting';
 import { useProjectFileIO } from './hooks/useProjectFileIO';
 import { useProjectRecords } from './hooks/useProjectRecords';
 import { useRecordNodeAiTasks } from './hooks/useRecordNodeAiTasks';
+import { stripProjectExportExtension, type ProjectExportFormat } from './utils/projectExportFormats';
 
 import '@xyflow/react/dist/style.css';
 
@@ -130,44 +131,47 @@ export default function App() {
   // 2. High-Precision Change Implementation with Alignment Snapping
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     const positionChange = changes.find((c): c is NodePositionChange => c.type === 'position');
-    
+    let nextChanges = changes;
+
     if (positionChange?.dragging && positionChange.position) {
       const currentNodes = getNodes();
       const node = currentNodes.find((n) => n.id === positionChange.id);
-      
+
       if (node) {
-        // 注意：拖拽过程中的 positionChange.position 才是“实时位置”
-        // 这里需要把它换算到绝对坐标后再做吸附计算，否则会把位置覆盖回旧值，导致拖拽卡顿/只在松手时跳动。
-        const parent = node.parentId ? currentNodes.find(n => n.id === node.parentId) : undefined;
+        const parent = node.parentId ? currentNodes.find((n) => n.id === node.parentId) : undefined;
         const parentAbsPos = parent ? getNodeAbsolutePosition(parent, currentNodes) : null;
         const proposedAbsPos = parentAbsPos
           ? { x: parentAbsPos.x + positionChange.position.x, y: parentAbsPos.y + positionChange.position.y }
           : positionChange.position;
 
-        // 计算对齐辅助线和对齐后的绝对坐标
         const { snappedPosition: snappedAbsPos, helperLines: lines } = getHelperLines(
           { ...node, position: proposedAbsPos },
-          currentNodes
+          currentNodes,
         );
 
-        // 如果节点有父级，需要将对齐后的绝对坐标转换回相对于父级的坐标
-        if (parentAbsPos) {
-          positionChange.position = {
-            x: snappedAbsPos.x - parentAbsPos.x,
-            y: snappedAbsPos.y - parentAbsPos.y,
-          };
-        } else {
-          positionChange.position = snappedAbsPos;
-        }
+        const normalizedPosition = parentAbsPos
+          ? {
+              x: snappedAbsPos.x - parentAbsPos.x,
+              y: snappedAbsPos.y - parentAbsPos.y,
+            }
+          : snappedAbsPos;
+
+        // Avoid mutating upstream NodeChange objects, which may be readonly/frozen in newer React Flow internals.
+        nextChanges = changes.map((change) => (
+          change.type === 'position' &&
+          change.id === positionChange.id &&
+          change.dragging
+            ? { ...change, position: normalizedPosition }
+            : change
+        ));
 
         updateHelperLines(lines);
       }
-    } else if (changes.some(c => c.type === 'dimensions' || c.type === 'select')) {
-      // Clear lines if not dragging
+    } else if (changes.some((c) => c.type === 'dimensions' || c.type === 'select')) {
       updateHelperLines({ horizontal: null, vertical: null });
     }
-    
-    onNodesChangeOriginal(changes);
+
+    onNodesChangeOriginal(nextChanges);
   }, [onNodesChangeOriginal, getNodes, updateHelperLines]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [language, setLanguage] = useState<'en' | 'zh'>('zh');
@@ -197,6 +201,7 @@ export default function App() {
   const [hideGeneratingRecord, setHideGeneratingRecord] = useState(false);
   const [isExportFileModalOpen, setIsExportFileModalOpen] = useState(false);
   const [exportFileName, setExportFileName] = useState('YesFlow Project');
+  const [exportFileFormat, setExportFileFormat] = useState<ProjectExportFormat>('json');
   const [clipboard, setClipboard] = useState<{ nodes: Node[]; edges: Edge[] } | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -264,6 +269,12 @@ export default function App() {
     setEdges,
   });
 
+  const handlePersistError = useCallback((message: string) => {
+    setImportStatus('error');
+    setImportMessage(message);
+    setTimeout(() => setImportStatus('idle'), 5000);
+  }, []);
+
   const {
     localRecords,
     currentRecordId,
@@ -279,11 +290,7 @@ export default function App() {
     projectName,
     language,
     mode,
-    onPersistError: (message) => {
-      setImportStatus('error');
-      setImportMessage(message);
-      setTimeout(() => setImportStatus('idle'), 5000);
-    },
+    onPersistError: handlePersistError,
   });
   const currentRecordIdRef = React.useRef<string | null>(currentRecordId);
   const abortAiTaskHandlersRef = React.useRef<Record<string, (nodeId: string) => void>>({});
@@ -755,20 +762,20 @@ export default function App() {
   );
 
   useEffect(() => {
-    const isJsonFile = (file: File) => /\.json$/i.test(file.name) || /^(application|text)\/json$/i.test(file.type);
+    const isProjectFile = (file: File) => /\.(json|pos|posf)$/i.test(file.name) || /^(application|text)\/json$/i.test(file.type);
 
-    const hasJsonFileCandidate = (transfer: DataTransfer) => {
+    const hasProjectFileCandidate = (transfer: DataTransfer) => {
       const itemFiles = Array.from(transfer.items || [])
         .filter((item) => item.kind === 'file')
         .map((item) => item.getAsFile())
         .filter((file): file is File => file !== null);
 
       if (itemFiles.length > 0) {
-        return itemFiles.some(isJsonFile);
+        return itemFiles.some(isProjectFile);
       }
 
       const transferFiles = Array.from(transfer.files || []);
-      return transferFiles.some(isJsonFile);
+      return transferFiles.some(isProjectFile);
     };
 
     const isProjectFileDrag = (transfer: DataTransfer | null) => {
@@ -777,7 +784,7 @@ export default function App() {
       // React Flow internal drags have 'application/reactflow' set — those are NOT project file imports.
       const hasFiles = types.includes('Files');
       const isReactFlowDrag = types.includes('application/reactflow');
-      return hasFiles && !isReactFlowDrag && hasJsonFileCandidate(transfer);
+      return hasFiles && !isReactFlowDrag && hasProjectFileCandidate(transfer);
     };
 
     const resetFileDragState = () => {
@@ -816,7 +823,7 @@ export default function App() {
       if (!hasFiles || isReactFlowDrag) return;
 
       const droppedFiles = Array.from(transfer.files || []);
-      const file = droppedFiles.find(isJsonFile);
+      const file = droppedFiles.find(isProjectFile);
       if (!file) return;
 
       event.preventDefault();
@@ -1006,7 +1013,7 @@ export default function App() {
   }, [fitView, nodes, pendingAiViewportRequest]);
 
   const getDefaultExportFileName = useCallback(
-    () => projectName.replace(/\.(json|zip|txt)$/i, '').trim() || 'YesFlow Project',
+    () => stripProjectExportExtension(projectName).trim() || 'YesFlow Project',
     [projectName],
   );
 
@@ -1026,10 +1033,10 @@ export default function App() {
   }, [getDefaultExportFileName]);
 
   const handleConfirmExportFile = useCallback(() => {
-    exportProjectFile(exportFileName);
+    exportProjectFile(exportFileName, exportFileFormat);
     setIsExportFileModalOpen(false);
     showStatus(language === 'zh' ? '已开始导出' : 'Export started', <Save className="w-3.5 h-3.5" />);
-  }, [exportProjectFile, exportFileName, showStatus, language]);
+  }, [exportProjectFile, exportFileName, exportFileFormat, showStatus, language]);
 
   const {
     activeKeys,
@@ -1386,7 +1393,7 @@ export default function App() {
           onDismissImport={() => setImportStatus('idle')}
         />
 
-        <input type="file" ref={fileInputRef} onChange={handleLoadFileWithAiReset} accept=".json,application/json" style={{ display: 'none' }} />
+        <input type="file" ref={fileInputRef} onChange={handleLoadFileWithAiReset} accept=".json,.pos,.posf,application/json" style={{ display: 'none' }} />
       </NodeSettingsContext.Provider>
 
       {/* Settings Modal */}
@@ -1433,7 +1440,9 @@ export default function App() {
           visible={isExportFileModalOpen}
           language={language}
           fileName={exportFileName}
+          format={exportFileFormat}
           onFileNameChange={setExportFileName}
+          onFormatChange={setExportFileFormat}
           onConfirm={handleConfirmExportFile}
           onClose={() => setIsExportFileModalOpen(false)}
         />

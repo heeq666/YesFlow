@@ -1,6 +1,6 @@
 # YesFlow
 
-> v0.3.2 · 一个把 AI 规划、任务拆解、资料沉淀与执行推进整合到同一张画布里的可视化工作流工作台。
+> v0.3.4 · 一个把 AI 规划、任务拆解、资料沉淀与执行推进整合到同一张画布里的可视化工作流工作台。
 
 [English](./README.md) · [中文](./README_ZH.md)
 
@@ -15,22 +15,22 @@
   <a href="https://github.com/heeq666/YesFlow/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License">
   </a>
-  <img src="https://img.shields.io/badge/Version-0.3.2-black?style=flat-square" alt="Version 0.3.2">
+  <img src="https://img.shields.io/badge/Version-0.3.4-black?style=flat-square" alt="Version 0.3.4">
 </p>
 
 ## 项目简介
 
 YesFlow 会把一句自然语言目标转成可以继续编辑的执行流程图。你可以先让 AI 生成计划，再在节点画布上继续整理结构，并把每个任务节点需要的文档、图片、链接、时间安排和表格都沉淀在同一个工作空间里。
 
-`0.3.2` 聚焦于导入导出安全性、本地项目记录可靠性，以及节点图片资料的操作效率，让复杂流程更稳更顺畅。
+`0.3.4` 聚焦于项目导出格式扩展，并修复节点拖动触发本地记录自动保存时可能出现的白屏问题。
 
-## 0.3.2 更新重点
+## 0.3.4 更新重点
 
-- 图片工作流升级：支持图片标题编辑、来源复制、按钮排序与拖拽排序（节点工具区与快捷入口都可用）
-- 右侧资源栏可直接展示节点图片，并提供复制链接、打开原图、跳转工具区等快捷操作
-- 导入安全增强：JSON 导入前增加轻量完整性检查，并在嵌入图片过多时给出提醒
-- 持久化链路更稳：本地记录与导出 JSON 统一清理临时字段，旧版本记录加载时自动安全归一化
-- 发布流程补强：新增 `npm run release:check` 与可复用发布清单，同时通过懒加载减轻主包体压力
+- 导出弹窗新增 YesFlow JSON、POS、POSF、Visio VDX 与 Mermaid 文本格式
+- POS/POSF 项目包支持通过文件选择器或拖拽重新导入
+- 修复拖动节点后本地记录自动保存引发的画布白屏崩溃
+- 节点拖动吸附时不再直接修改 React Flow 的变更对象，兼容性更稳
+- 简化节点工具快照数据，让侧栏与快捷入口状态展示更清晰
 
 ## 核心能力
 

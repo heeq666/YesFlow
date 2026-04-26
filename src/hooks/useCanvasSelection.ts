@@ -25,7 +25,7 @@ export function useCanvasSelection({
   const currentSelectedIdsRef = useRef<Set<string>>(new Set());
 
   const [selectionBox, setSelectionBox] = useState<SelectionBox>(null);
-  const [isDragSelecting, setIsDragSelecting] = useState(false);
+  const isDragSelectingRef = useRef(false);
   const selStartRef = useRef<{ x: number; y: number } | null>(null);
   const isCustomSelRef = useRef(false);
 
@@ -76,10 +76,6 @@ export function useCanvasSelection({
   }, []);
 
   useEffect(() => {
-    Object.assign(store.getState(), { isDragSelecting });
-  }, [isDragSelecting, store]);
-
-  useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
       .react-flow__selection { display: none !important; }
@@ -126,7 +122,7 @@ export function useCanvasSelection({
       isCustomSelRef.current = false;
       selStartRef.current = null;
       setSelectionBox(null);
-      setIsDragSelecting(false);
+      isDragSelectingRef.current = false;
       isBoxSelectingRef.current = false;
     };
 
@@ -153,7 +149,7 @@ export function useCanvasSelection({
 
     isBoxSelectingRef.current = true;
     isCustomSelRef.current = true;
-    setIsDragSelecting(true);
+    isDragSelectingRef.current = true;
     prevSelectedNodeIdsRef.current = new Set(currentSelectedIdsRef.current);
 
     e.preventDefault();

@@ -2,6 +2,23 @@
 
 All notable changes to **YesFlow** are documented here.
 
+## [0.3.4] - 2026-04-26
+
+### Added
+
+- Export dialog now supports YesFlow JSON, POS, POSF, Visio VDX, and Mermaid text output formats
+- POS/POSF project packages can be imported through both the file picker and drag-and-drop import flow
+
+### Changed
+
+- Project export generation is centralized in a dedicated format utility for cleaner file IO behavior
+- Node tool snapshots are simplified for clearer sidebar and quick-entry state rendering
+
+### Fixed
+
+- Fixed a drag-triggered blank screen caused by an unstable local-record persistence callback
+- Avoided mutating React Flow node-change payloads while applying drag snapping
+
 ## [0.3.3] - 2026-04-05
 
 ### Changed

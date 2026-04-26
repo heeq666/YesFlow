@@ -1,5 +1,5 @@
 {
   "name": "YesFlow",
-  "description": "YesFlow 0.3.3 upgrades the toolchain, optimizes bundle loading and canvas rendering performance, and hardens CI release reliability.",
+  "description": "YesFlow 0.3.4 expands project export formats with POS, POSF, Visio VDX, and Mermaid text, and fixes a drag-triggered blank screen.",
   "requestFramePermissions": []
 }

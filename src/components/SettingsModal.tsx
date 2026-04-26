@@ -1459,8 +1459,8 @@ export default function SettingsModal({ settings, language, onClose, onUpdate, o
                   <p className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 ${isDarkTheme ? 'text-slate-300' : 'text-neutral-500'}`}>One Yes, All Flow</p>
                   <p className={`max-w-xl text-sm leading-7 mb-6 ${isDarkTheme ? 'text-slate-300' : 'text-neutral-500'}`}>
                     {language === 'zh'
-                      ? 'YesFlow 0.3.3 升级了核心工具链并优化了首屏加载与画布性能，让复杂项目在同一张画布上的编排响应更快、发布流程更稳。'
-                      : 'YesFlow 0.3.3 upgrades the core toolchain and improves initial loading plus canvas performance, delivering faster orchestration and more reliable releases.'}
+                      ? 'YesFlow 0.3.4 新增 POS、POSF、Visio 与 Mermaid 文本导出，并修复拖动节点后自动保存可能触发的白屏问题。'
+                      : 'YesFlow 0.3.4 adds POS, POSF, Visio, and Mermaid exports, and fixes a drag-triggered autosave blank screen.'}
                   </p>
                   
                   <div className="flex flex-col items-center gap-3">
